@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography } from '@material-ui/core';
-import * as idb from 'idb';
+import * as idb from 'idb/with-async-ittr.js';
 
 import * as smoldot from './../smoldot.js';
 import { default as AccountInput } from './AccountInput.jsx';
@@ -16,18 +16,22 @@ export default class extends React.Component {
     }
 
     componentDidMount() {
-        idb.openDB('smoldot', 1, {
-            upgrade(db) {
-                db.createObjectStore('hashes_by_number', { keyPath: 'number' });
-                const events = db.createObjectStore('events');
-                events.createIndex('account', 'account', { unique: false });
-                db.createObjectStore('timestamps', { keyPath: 'number' });
-                db.createObjectStore('finalized_storage', { keyPath: 'key' });
-            },
-        }).then((database) => {
+        (async () => {
+            let database = await idb.openDB('smoldot', 1, {
+                upgrade(db) {
+                    const events = db.createObjectStore('events');
+                    events.createIndex('account', 'account', { unique: false });
+                    db.createObjectStore('blocks', { keyPath: 'number' });
+                    db.createObjectStore('metadata', { keyPath: 'runtime_version' });
+                    db.createObjectStore('meta');
+                },
+            });
+            
+            const database_content = await database.get('meta', 'chain');
+
             this.smoldot = smoldot.start({
                 chain_spec: JSON.stringify(this.state.chainSpec),
-                database_content: null,
+                database_content: database_content,
                 database_save_callback: null,
                 best_block_update_callback: (num) => {
                     this.setState({
@@ -35,11 +39,11 @@ export default class extends React.Component {
                     });
                 }
             });
-        });
-
+        })();
     }
 
     componentWillUnmount() {
+        // TODO: somehow stop smoldot?
     }
 
     render() {
