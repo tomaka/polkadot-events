@@ -6,7 +6,7 @@ import { TypeRegistry } from '@polkadot/types';
 import { getSpecTypes } from '@polkadot/types-known';
 
 import * as smoldot from './../smoldot.js';
-import { default as AccountInput } from './AccountInput.jsx';
+import { default as AccountViewer } from './AccountViewer.jsx';
 import { default as NodeState } from './NodeState.jsx';
 
 // TODO: good account for testing => 5GEkeVgLtxezLCYDKQ11LcUwotRQwxyDKJsWBx52CsZbLDQB
@@ -15,7 +15,6 @@ export default class extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            chainSpec: props.chainSpec,
             currentBlockHeight: null,
         };
     }
@@ -42,7 +41,7 @@ export default class extends React.Component {
             this.registry = new TypeRegistry();
 
             this.smoldot = smoldot.start({
-                chain_spec: JSON.stringify(this.state.chainSpec),
+                chain_spec: JSON.stringify(this.props.chainSpec),
                 database_content: database_content,
                 database_save_callback: (to_save) => {
                     // TODO: can this be racy? should we wait for previous save to finish?
@@ -81,8 +80,7 @@ export default class extends React.Component {
                 // TODO: finish here?
                 //this.registry.setChainProperties(chainProps || this.registry.getChainProperties());
                 //this.registry.setKnownTypes(this._options);
-                // TODO: chain name
-                this.registry.register(getSpecTypes(this.registry, 'Westend', undecoded_metadata.spec_name, block.runtime_spec));
+                this.registry.register(getSpecTypes(this.registry, this.props.chainSpec.name, undecoded_metadata.spec_name, block.runtime_spec));
                 //this.registry.setHasher(getSpecHasher(this.registry, chain, version.specName));
 
                 /*if (this.registry.knownTypes.typesBundle) {
@@ -134,7 +132,7 @@ export default class extends React.Component {
             <Box>
                 <Typography variant="h1">Polkadot events scraper</Typography>
                 <NodeState blockHeight={this.state.currentBlockHeight} syncing="true" />
-                <AccountInput database={this.state.database} setAddress={() => { }} />
+                <AccountViewer database={this.state.database} />
             </Box>
         );
     }
