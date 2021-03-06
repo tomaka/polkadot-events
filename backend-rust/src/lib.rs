@@ -27,7 +27,7 @@ use smoldot::{
     chain, chain_spec,
     libp2p::{multiaddr, peer_id::PeerId},
 };
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 pub mod ffi;
 
@@ -313,7 +313,12 @@ pub async fn start_client(
                     let sync_service = Arc::new(
                         sync_service::SyncService::new(sync_service::Config {
                             chain_information: chain_information.clone(),
-                            finalized_storage: Default::default(), // TODO:
+                            finalized_storage: {
+                                let mut finalized_block_storage = BTreeMap::<Vec<u8>, Vec<u8>>::new();
+                                for (key, value) in  chain_spec.genesis_storage() {
+                                    finalized_block_storage.insert(key.to_owned(), value.to_owned());
+                                }finalized_block_storage
+                            },
                             tasks_executor: Box::new({
                                 let new_task_tx = new_task_tx.clone();
                                 move |fut| new_task_tx.unbounded_send(fut).unwrap()

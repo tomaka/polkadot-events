@@ -36,7 +36,7 @@ export async function start(config) {
   const database_save_callback = config.database_save_callback;
   // Maximum level of log entries sent by the client.
   // 0 = Logging disabled, 1 = Error, 2 = Warn, 3 = Info, 4 = Debug, 5 = Trace
-  const max_log_level = config.max_log_level || 5;
+  const max_log_level = config.max_log_level || 3;
 
   if (Object.prototype.toString.call(chain_spec) !== '[object String]')
     throw new SmoldotError('config must include a string chain_spec');

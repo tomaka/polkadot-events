@@ -139,12 +139,14 @@ fn start_sync(
                         previous_best_height,
                         reason,
                     } => {
+                        crate::yield_once().await;
                         process = s.process_one(unix_time);
                     }
                     optimistic::ProcessOne::Finalized {
                         sync: s,
                         finalized_blocks,
                     } => {
+                        crate::yield_once().await;
                         process = s.process_one(unix_time);
 
                         // TODO: maybe write in a separate task? but then we can't access the finalized storage immediately after?
@@ -167,6 +169,7 @@ fn start_sync(
                     }
 
                     optimistic::ProcessOne::NewBest { sync: s, .. } => {
+                        crate::yield_once().await;
                         process = s.process_one(unix_time);
                     }
 
