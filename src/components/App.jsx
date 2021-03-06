@@ -19,7 +19,7 @@ export default class extends React.Component {
 
     componentDidMount() {
         (async () => {
-            let database = await idb.openDB('smoldot', 1, {
+            let database = await idb.openDB('polkadot-events-scraper', 1, {
                 upgrade(db) {
                     const events = db.createObjectStore('events');
                     events.createIndex('account', 'account', { unique: false });
@@ -77,6 +77,7 @@ export default class extends React.Component {
                 this.registry.setMetadata(metadata);
             }
 
+            console.log(block.events);
             const eventRecords = this.registry.createType('Vec<EventRecord>', block.events, true);
             eventRecords.forEach((record) => {
                 const data = record.event.data.toString();
@@ -84,8 +85,9 @@ export default class extends React.Component {
             })
         }
 
+        // Store everything in the database.
+        // This is done in a single transaction, in order to make sure that events aren't missed.
         const tx = this.state.database.transaction(['meta', 'metadata', 'blocks'], 'readwrite');
-
         let promises = [];
         promises.push(tx.objectStore('meta').put(to_save.chain, 'chain'));
         promises.push(...to_save.new_metadata.map((metadata) => {
