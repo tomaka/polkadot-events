@@ -153,11 +153,12 @@ export async function start(config) {
         }
       },
 
-      // Must set the content of the database to the given string.
+      // Must merge in the database the data in JSON passed as parameter.
       database_save: (ptr, len) => {
         if (database_save_callback) {
           let content = Buffer.from(module.exports.memory.buffer).toString('utf8', ptr, ptr + len);
-          database_save_callback(content);
+          let data = JSON.parse(content);
+          database_save_callback(data);
         }
       },
 

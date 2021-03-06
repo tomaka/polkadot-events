@@ -19,7 +19,10 @@ use crate::{ffi, network_service};
 
 use core::{num::NonZeroU32, pin::Pin};
 use futures::{channel::mpsc, prelude::*};
-use smoldot::{chain::chain_information, executor, libp2p, network, sync::optimistic};
+use smoldot::{
+    chain::chain_information, database::finalized_serialize, executor, libp2p, network,
+    sync::optimistic,
+};
 use std::{collections::BTreeMap, sync::Arc};
 
 /// Configuration for a [`SyncService`].
@@ -66,7 +69,10 @@ impl SyncService {
 }
 
 enum ToDatabase {
-    FinalizedBlocks(Vec<optimistic::Block<()>>),
+    FinalizedBlocks {
+        blocks: Vec<optimistic::Block<()>>,
+        serialized_finalized_chain: String,
+    },
 }
 
 /// Returns the background task of the sync service.
@@ -161,7 +167,6 @@ fn start_sync(
                         );
 
                         crate::yield_once().await;
-                        process = s.process_one(unix_time);
 
                         // TODO: maybe write in a separate task? but then we can't access the finalized storage immediately after?
                         for block in &finalized_blocks {
@@ -176,8 +181,18 @@ fn start_sync(
                             }
                         }
 
+                        let serialized_finalized_chain = finalized_serialize::encode_chain_storage(
+                            s.as_chain_information(),
+                            Some(finalized_block_storage.iter()),
+                        );
+
+                        process = s.process_one(unix_time);
+
                         to_database
-                            .send(ToDatabase::FinalizedBlocks(finalized_blocks))
+                            .send(ToDatabase::FinalizedBlocks {
+                                blocks: finalized_blocks,
+                                serialized_finalized_chain,
+                            })
                             .await
                             .unwrap();
                     }
@@ -322,7 +337,15 @@ fn start_sync(
 /// Starts the task that writes blocks to the database.
 async fn start_database_write(mut messages_rx: mpsc::Receiver<ToDatabase>) {
     // TODO: restore
-    while let Some(_) = messages_rx.next().await {}
+    while let Some(ToDatabase::FinalizedBlocks {
+        blocks,
+        serialized_finalized_chain,
+    }) = messages_rx.next().await
+    {
+        ffi::database_save(&ffi::DatabaseSave {
+            chain: &serialized_finalized_chain,
+        });
+    }
 
     /*let finalized_block_hash = database.finalized_block_hash().unwrap();
 

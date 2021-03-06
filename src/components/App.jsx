@@ -26,13 +26,26 @@ export default class extends React.Component {
                     db.createObjectStore('meta');
                 },
             });
-            
+
+            // TODO: necessary?
+            this.setState({
+                database: database,
+            });
+
             const database_content = await database.get('meta', 'chain');
 
             this.smoldot = smoldot.start({
                 chain_spec: JSON.stringify(this.state.chainSpec),
                 database_content: database_content,
-                database_save_callback: null,
+                database_save_callback: (to_save) => {
+                    (async () => {
+                        const tx = database.transaction(['meta', 'blocks'], 'readwrite');
+                        await Promise.all([
+                            tx.objectStore('meta').put('chain', to_save.chain),
+                            tx.done,
+                        ]);
+                    });
+                },
                 best_block_update_callback: (num) => {
                     this.setState({
                         currentBlockHeight: num,

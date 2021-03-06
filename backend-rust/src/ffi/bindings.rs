@@ -117,12 +117,19 @@ extern "C" {
     /// Client wants to report that the best block is the one passed as parameter.
     pub fn best_block_update(best_block_number: u32);
 
-    /// Client wants to set the content of the database to a UTF-8 string found at offset `ptr`
-    /// and with length `len`.
+    /// Client wants to merge to the database the data found at offset `ptr` and with length
+    /// `len`.
     ///
-    /// The entire content of the database should be replaced with that string.
+    /// The data is a UTF-8 string in the following format:
     ///
-    /// This value is meant to later be passed to [`init`] when restarting the client.
+    /// ```notrust
+    /// {
+    ///     "chain": <opaque>,
+    /// }
+    /// ```
+    // TODO: finish ^
+    ///
+    /// The value of `chain` is meant to later be passed to [`init`] when restarting the client.
     ///
     /// Saving the database is entirely optional, and it is legal to simply do nothing.
     pub fn database_save(ptr: u32, len: u32);

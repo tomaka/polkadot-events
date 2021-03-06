@@ -213,12 +213,19 @@ impl Sub<Instant> for Instant {
     }
 }
 
-/// Sets the content of the database to the given string.
-pub(crate) fn database_save(content: &str) {
+/// See [`database_save`].
+#[derive(serde::Serialize)]
+pub(crate) struct DatabaseSave<'a> {
+    pub(crate) chain: &'a str,
+}
+
+/// Merges the argument into the database.
+pub(crate) fn database_save(data: &DatabaseSave) {
     unsafe {
+        let data = serde_json::to_vec(data).unwrap();
         bindings::database_save(
-            u32::try_from(content.as_bytes().as_ptr() as usize).unwrap(),
-            u32::try_from(content.as_bytes().len()).unwrap(),
+            u32::try_from(data.as_ptr() as usize).unwrap(),
+            u32::try_from(data.len()).unwrap(),
         );
     }
 }
