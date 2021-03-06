@@ -24,7 +24,7 @@ use smoldot::{
     sync::optimistic,
 };
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     sync::Arc,
 };
 
@@ -247,7 +247,7 @@ fn start_sync(
                             let events_encoded = if let Some(value) =
                                 block.storage_top_trie_changes.get(&events_storage_key[..])
                             {
-                                value
+                                value.clone().unwrap()
                             } else {
                                 todo!()
                             };
@@ -255,9 +255,7 @@ fn start_sync(
                             blocks_save.push(ffi::DatabaseSaveBlock {
                                 number: block.header.number,
                                 runtime_spec: finalized_runtime_version,
-                                events: smoldot::json_rpc::methods::HexString(
-                                    events_encoded.clone().unwrap(),
-                                ),
+                                events: smoldot::json_rpc::methods::HexString(events_encoded),
                             });
                         }
 
