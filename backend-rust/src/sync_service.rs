@@ -184,13 +184,6 @@ fn start_sync(
 
                         crate::yield_once().await;
 
-                        let serialized_finalized_chain = finalized_serialize::encode_chain_storage(
-                            s.as_chain_information(),
-                            Some(finalized_block_storage.iter()),
-                        );
-
-                        process = s.process_one(unix_time);
-
                         let mut new_metadata = Vec::new();
                         let mut blocks_save = Vec::with_capacity(finalized_blocks.len());
 
@@ -269,10 +262,15 @@ fn start_sync(
                         }
 
                         ffi::database_save(&ffi::DatabaseSave {
-                            chain: &serialized_finalized_chain,
+                            chain: &finalized_serialize::encode_chain_storage(
+                                s.as_chain_information(),
+                                Some(finalized_block_storage.iter()),
+                            ),
                             new_metadata,
                             blocks: blocks_save,
                         });
+
+                        process = s.process_one(unix_time);
                     }
 
                     optimistic::ProcessOne::NewBest {

@@ -49,7 +49,7 @@ export default class extends React.Component {
                             // TODO: is `this` correctly referring to the class?
                             if (block.runtime_spec != this.current_runtime_spec) {
                                 this.current_runtime_spec = block.runtime_spec;
-    
+
                                 let undecoded_metadata = to_save.new_metadata.find((m) => m.runtime_spec == block.runtime_spec);
                                 if (!undecoded_metadata) {
                                     undecoded_metadata = await database.get('metadata', block.runtime_spec);
@@ -67,16 +67,17 @@ export default class extends React.Component {
                         }
 
                         const tx = database.transaction(['meta', 'metadata', 'blocks'], 'readwrite');
-                        await Promise.all([
-                            tx.objectStore('meta').put(to_save.chain, 'chain'),
-                            to_save.new_metadata.map((metadata) => {
-                                return tx.objectStore('metadata').put(metadata);
-                            }),
-                            to_save.blocks.map((block) => {
-                                return tx.objectStore('blocks').put(block);
-                            }),
-                            tx.done,
-                        ]);
+
+                        let promises = [];
+                        promises.push(tx.objectStore('meta').put(to_save.chain, 'chain'));
+                        promises.push(...to_save.new_metadata.map((metadata) => {
+                            return tx.objectStore('metadata').put(metadata);
+                        }));
+                        promises.push(...to_save.blocks.map((block) => {
+                            return tx.objectStore('blocks').put(block);
+                        }));
+                        promises.push(tx.done);
+                        await Promise.all(promises);
                     })();
                 },
                 best_block_update_callback: (num) => {
