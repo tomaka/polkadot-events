@@ -29,6 +29,7 @@
     "@polkadot/metadata": "^3.9.3",
     "@polkadot/types": "^3.9.3",
     "buffer": "^6.0.1",
+    "idb": "^6.0.0",
     "performance-now": "^2.1.0",
     "randombytes": "^2.1.0",
     "react": "17.0.1",
