@@ -23,10 +23,7 @@ use smoldot::{
     chain::chain_information, database::finalized_serialize, executor, libp2p, network,
     sync::optimistic,
 };
-use std::{
-    collections::BTreeMap,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 /// Configuration for a [`SyncService`].
 pub struct Config {
@@ -92,8 +89,7 @@ fn start_sync(
         smoldot::executor::vm::ExecHint::Oneshot,
     )
     .unwrap();
-    let (runtime_spec, vm) = smoldot::executor::core_version(vm).unwrap();
-    let mut finalized_runtime_version = runtime_spec.decode().spec_version;
+    let (mut finalized_runtime_version, vm) = smoldot::executor::core_version(vm).unwrap();
     let mut finalized_metadata = {
         let query = smoldot::metadata::query_metadata(vm);
         loop {
@@ -207,7 +203,7 @@ fn start_sync(
                                 .unwrap();
                                 let (runtime_spec, vm) =
                                     smoldot::executor::core_version(vm).unwrap();
-                                finalized_runtime_version = runtime_spec.decode().spec_version;
+                                finalized_runtime_version = runtime_spec;
                                 finalized_metadata = {
                                     let query = smoldot::metadata::query_metadata(vm);
                                     loop {
@@ -225,14 +221,22 @@ fn start_sync(
                                 };
 
                                 new_metadata.push(ffi::DatabaseSaveMetadata {
-                                    runtime_spec: finalized_runtime_version,
+                                    runtime_spec: finalized_runtime_version.decode().spec_version,
+                                    spec_name: finalized_runtime_version
+                                        .decode()
+                                        .spec_name
+                                        .to_owned(),
                                     metadata: smoldot::json_rpc::methods::HexString(
                                         finalized_metadata.clone(),
                                     ),
                                 });
                             } else if block.header.number == 1 {
                                 new_metadata.push(ffi::DatabaseSaveMetadata {
-                                    runtime_spec: finalized_runtime_version,
+                                    runtime_spec: finalized_runtime_version.decode().spec_version,
+                                    spec_name: finalized_runtime_version
+                                        .decode()
+                                        .spec_name
+                                        .to_owned(),
                                     metadata: smoldot::json_rpc::methods::HexString(
                                         finalized_metadata.clone(),
                                     ),
@@ -254,7 +258,7 @@ fn start_sync(
 
                             blocks_save.push(ffi::DatabaseSaveBlock {
                                 number: block.header.number,
-                                runtime_spec: finalized_runtime_version,
+                                runtime_spec: finalized_runtime_version.decode().spec_version,
                                 events: smoldot::json_rpc::methods::HexString(events_encoded),
                             });
                         }

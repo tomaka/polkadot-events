@@ -125,7 +125,7 @@ extern "C" {
     /// ```notrust
     /// {
     ///     "chain": <opaque>,
-    ///     "new_metadata": [{28: "0xffffffff..."}, ...],
+    ///     "new_metadata": [{"runtime_spec":28,"spec_name":"foo","metadata":"0xffffffff..."}, ...],
     ///     "blocks": [{"number": 100000, "runtime_specs": 28, "events":"0xffffff..."}, ...]
     /// }
     /// ```

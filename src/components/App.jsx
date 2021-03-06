@@ -1,12 +1,15 @@
 import React from 'react';
 import { Box, Typography } from '@material-ui/core';
 import * as idb from 'idb/with-async-ittr.js';
-import { TypeRegistry } from '@polkadot/types';
 import { Metadata } from '@polkadot/metadata';
+import { TypeRegistry } from '@polkadot/types';
+import { getSpecTypes } from '@polkadot/types-known';
 
 import * as smoldot from './../smoldot.js';
 import { default as AccountInput } from './AccountInput.jsx';
 import { default as NodeState } from './NodeState.jsx';
+
+// TODO: good account for testing => 5GEkeVgLtxezLCYDKQ11LcUwotRQwxyDKJsWBx52CsZbLDQB
 
 export default class extends React.Component {
     constructor(props) {
@@ -73,12 +76,24 @@ export default class extends React.Component {
                     undecoded_metadata = await this.state.database.get('metadata', block.runtime_spec);
                 }
 
-                console.log(undecoded_metadata);
+                // TODO: finish here?
+                //this.registry.setChainProperties(chainProps || this.registry.getChainProperties());
+                //this.registry.setKnownTypes(this._options);
+                // TODO: chain name
+                this.registry.register(getSpecTypes(this.registry, 'Westend', undecoded_metadata.spec_name, block.runtime_spec));
+                //this.registry.setHasher(getSpecHasher(this.registry, chain, version.specName));
+
+                /*if (this.registry.knownTypes.typesBundle) {
+                    this.registry.knownTypes.typesAlias = getSpecAlias(registry, chain, version.specName);
+                }*/
+
                 const metadata = new Metadata(this.registry, undecoded_metadata.metadata);
-                this.registry.setMetadata(metadata);
+                this.registry.setMetadata(metadata, undefined, {
+                    /*...getSpecExtensions(registry, chain, version.specName),
+                    ...(this._options.signedExtensions || {})*/
+                });
             }
 
-            console.log(block.number, block.events);
             const eventRecords = this.registry.createType('Vec<EventRecord>', block.events);
             eventRecords.forEach((record) => {
                 const data = record.event.data.toString();

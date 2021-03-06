@@ -224,6 +224,7 @@ pub(crate) struct DatabaseSave<'a> {
 #[derive(serde::Serialize)]
 pub(crate) struct DatabaseSaveMetadata {
     pub runtime_spec: u32,
+    pub spec_name: String,
     pub metadata: smoldot::json_rpc::methods::HexString,
 }
 

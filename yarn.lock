@@ -919,7 +919,7 @@
   dependencies:
     "@babel/runtime" "^7.13.8"
 
-"@polkadot/types-known@3.11.1":
+"@polkadot/types-known@3.11.1", "@polkadot/types-known@^3.11.1":
   version "3.11.1"
   resolved "https://registry.yarnpkg.com/@polkadot/types-known/-/types-known-3.11.1.tgz#f695c9155fa54eeed95cea179bb8cb2398726bd3"
   integrity sha512-ImAxyCdqblmlXaMlgvuXZ6wzZgOYgE40FgWaYRJpFXRGJLDwtcJcpVI+7m/ns5dJ3WujboEMOHVR1HPpquw8Jw==
