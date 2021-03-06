@@ -29,7 +29,6 @@ export default class extends React.Component {
                 },
             });
 
-            // TODO: necessary?
             this.setState({
                 database: database,
             });
@@ -45,39 +44,7 @@ export default class extends React.Component {
                 database_save_callback: (to_save) => {
                     // TODO: can this be racy? should we wait for previous save to finish?
                     (async () => {
-                        for (const block in to_save.blocks) {
-                            // TODO: is `this` correctly referring to the class?
-                            if (block.runtime_spec != this.current_runtime_spec) {
-                                this.current_runtime_spec = block.runtime_spec;
-
-                                let undecoded_metadata = to_save.new_metadata.find((m) => m.runtime_spec == block.runtime_spec);
-                                if (!undecoded_metadata) {
-                                    undecoded_metadata = await database.get('metadata', block.runtime_spec);
-                                }
-
-                                const metadata = new Metadata(registry, undecoded_metadata);
-                                this.registry.setMetadata(metadata);
-                            }
-
-                            const event_records = this.registry.createType('Vec<EventRecord>', block.events, true);
-                            event_records.forEach((record) => {
-                                const data = record.event.data.toString();
-                                console.log(data, record.event.section, record.event.method);
-                            })
-                        }
-
-                        const tx = database.transaction(['meta', 'metadata', 'blocks'], 'readwrite');
-
-                        let promises = [];
-                        promises.push(tx.objectStore('meta').put(to_save.chain, 'chain'));
-                        promises.push(...to_save.new_metadata.map((metadata) => {
-                            return tx.objectStore('metadata').put(metadata);
-                        }));
-                        promises.push(...to_save.blocks.map((block) => {
-                            return tx.objectStore('blocks').put(block);
-                        }));
-                        promises.push(tx.done);
-                        await Promise.all(promises);
+                        await this.blocksFromSmoldot(to_save);
                     })();
                 },
                 best_block_update_callback: (num) => {
@@ -91,6 +58,44 @@ export default class extends React.Component {
 
     componentWillUnmount() {
         // TODO: somehow stop smoldot?
+    }
+
+    /// To call when smoldot sends back blocks to decode and save in database.
+    async blocksFromSmoldot(to_save) {
+        for (const blockIndex in to_save.blocks) {
+            const block = to_save.blocks[blockIndex];
+
+            if (block.runtime_spec != this.current_runtime_spec) {
+                this.current_runtime_spec = block.runtime_spec;
+
+                let undecoded_metadata = to_save.new_metadata.find((m) => m.runtime_spec == block.runtime_spec);
+                if (!undecoded_metadata) {
+                    undecoded_metadata = await this.state.database.get('metadata', block.runtime_spec);
+                }
+
+                const metadata = new Metadata(this.registry, undecoded_metadata.metadata);
+                this.registry.setMetadata(metadata);
+            }
+
+            const eventRecords = this.registry.createType('Vec<EventRecord>', block.events, true);
+            eventRecords.forEach((record) => {
+                const data = record.event.data.toString();
+                console.log(block.number, data, record.event.section, record.event.method);
+            })
+        }
+
+        const tx = this.state.database.transaction(['meta', 'metadata', 'blocks'], 'readwrite');
+
+        let promises = [];
+        promises.push(tx.objectStore('meta').put(to_save.chain, 'chain'));
+        promises.push(...to_save.new_metadata.map((metadata) => {
+            return tx.objectStore('metadata').put(metadata);
+        }));
+        promises.push(...to_save.blocks.map((block) => {
+            return tx.objectStore('blocks').put(block);
+        }));
+        promises.push(tx.done);
+        await Promise.all(promises);
     }
 
     render() {
