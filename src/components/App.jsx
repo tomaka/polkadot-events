@@ -24,7 +24,7 @@ export default class extends React.Component {
         (async () => {
             let database = await idb.openDB('polkadot-events-scraper', 1, {
                 upgrade(db) {
-                    const events = db.createObjectStore('events');
+                    const events = db.createObjectStore('events', { keyPath: ['block', 'recordIndex', 'argIndex'] });
                     events.createIndex('account', 'account', { unique: false });
                     db.createObjectStore('blocks', { keyPath: 'number' });
                     db.createObjectStore('metadata', { keyPath: 'runtime_spec' });
@@ -65,6 +65,8 @@ export default class extends React.Component {
 
     /// To call when smoldot sends back blocks to decode and save in database.
     async blocksFromSmoldot(to_save) {
+        let eventsToStore = [];
+
         for (const blockIndex in to_save.blocks) {
             const block = to_save.blocks[blockIndex];
 
@@ -95,15 +97,23 @@ export default class extends React.Component {
             }
 
             const eventRecords = this.registry.createType('Vec<EventRecord>', block.events);
-            eventRecords.forEach((record) => {
-                const data = record.event.data.toString();
-                console.log(block.number, data, record.event.section, record.event.method);
+            eventRecords.forEach((record, recordIndex) => {
+                record.event.meta.args.forReach((arg, argIndex) => {
+                    if (arg == 'AccountId') {
+                        eventsToStore.push({
+                            account: record.event.data[argIndex].toString(),
+                            block: block.number,
+                            recordIndex: recordIndex,
+                            argIndex: argIndex,
+                        });
+                    }
+                });
             })
         }
 
         // Store everything in the database.
         // This is done in a single transaction, in order to make sure that events aren't missed.
-        const tx = this.state.database.transaction(['meta', 'metadata', 'blocks'], 'readwrite');
+        const tx = this.state.database.transaction(['meta', 'metadata', 'blocks', 'events'], 'readwrite');
         let promises = [];
         promises.push(tx.objectStore('meta').put(to_save.chain, 'chain'));
         promises.push(...to_save.new_metadata.map((metadata) => {
@@ -111,6 +121,9 @@ export default class extends React.Component {
         }));
         promises.push(...to_save.blocks.map((block) => {
             return tx.objectStore('blocks').put(block);
+        }));
+        promises.push(...eventsToStore.map((event) => {
+            return tx.objectStore('events').put(event);
         }));
         promises.push(tx.done);
         await Promise.all(promises);
