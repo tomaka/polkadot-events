@@ -27,11 +27,10 @@ use smoldot::{
     chain, chain_spec,
     libp2p::{multiaddr, peer_id::PeerId},
 };
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 pub mod ffi;
 
-mod lossy_channel;
 mod network_service;
 mod sync_service;
 
@@ -314,6 +313,7 @@ pub async fn start_client(
                     let sync_service = Arc::new(
                         sync_service::SyncService::new(sync_service::Config {
                             chain_information: chain_information.clone(),
+                            finalized_storage: Default::default(), // TODO:
                             tasks_executor: Box::new({
                                 let new_task_tx = new_task_tx.clone();
                                 move |fut| new_task_tx.unbounded_send(fut).unwrap()

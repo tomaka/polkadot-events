@@ -1,5 +1,5 @@
 import * as smoldot from './../smoldot.js';
-import polkadot_chains_specs from './../polkadot.json';
+import polkadot_chains_specs from './../westend.json'; // TODO: should be polkadot
 
 import React, { useState, useEffect } from 'react';
 import { Box, Typography } from '@material-ui/core';
