@@ -1,28 +1,65 @@
 import React, { useState, useEffect } from 'react';
 import TextField from '@material-ui/core/TextField';
+import { Autocomplete } from '@material-ui/lab';
 
-export default React.memo(({ setAddress }) => {
-    const [address, setValue] = useState(null);
-    
-    useEffect(() => {
-        setAddress(address)
-    }, [address, setAddress]);
+export default class extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            address: '',
+            autocompleteAddresses: [],
+            // TODO: set back to false at a periodic interval
+            autocompleteAddressesUpToDate: false,
+        };
+    }
 
-    const handleChangeButton = (e) => {
-        const val = e.currentTarget.value;
-        setValue(val);
-    };
+    handleChangeButton(e) {
+        let address = e.currentTarget.value;
+        this.props.setAddress(address);
+        this.setState({
+            address: address,
+        });
+    }
 
-    return (
-        <TextField
-            required
-            onChange={handleChangeButton}
-            onFocus={handleChangeButton}
-            onBlur={handleChangeButton}
-            label="Account address"
-            value={address != null ? address : ''}
-            helperText="Name of the accounts whose events to scrap"
-            variant="standard"
-        />
-    );
-});
+    render() {
+        if (!this.state.autocompleteAddressesUpToDate && this.props.database) {
+            (async () => {
+                let autocompleteAddresses = new Set();
+
+                let cursor = await this.props.database.transaction('events').store.index('account').openKeyCursor();
+                while (cursor) {
+                    autocompleteAddresses.add(cursor.key);
+                    cursor = await cursor.continue();
+                }
+
+                this.setState({
+                    autocompleteAddresses: Array.from(autocompleteAddresses),
+                    autocompleteAddressesUpToDate: true,
+                })
+            })();
+        }
+
+        return (
+            <Autocomplete
+                options={this.state.autocompleteAddresses}
+                autoHighlight
+                renderInput={(params) => (
+                    <TextField
+                        {...params}
+                        required
+                        onChange={(e) => this.handleChangeButton(e)}
+                        onFocus={(e) => this.handleChangeButton(e)}
+                        onBlur={(e) => this.handleChangeButton(e)}
+                        label="Account address"
+                        value={this.state.address != null ? this.state.address : ''}
+                        helperText="Name of the accounts whose events to scrap"
+                        variant="standard"
+                        inputProps={{
+                            ...params.inputProps
+                        }}
+                    />
+                )}
+            />
+        );
+    }
+}

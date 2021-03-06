@@ -134,7 +134,7 @@ export default class extends React.Component {
             <Box>
                 <Typography variant="h1">Polkadot events scraper</Typography>
                 <NodeState blockHeight={this.state.currentBlockHeight} syncing="true" />
-                <AccountInput setAddress={() => { }} />
+                <AccountInput database={this.state.database} setAddress={() => { }} />
             </Box>
         );
     }
