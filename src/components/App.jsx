@@ -79,7 +79,7 @@ export default class extends React.Component {
             }
 
             console.log(block.number, block.events);
-            const eventRecords = this.registry.createType('Vec<EventRecord>', block.events, true);
+            const eventRecords = this.registry.createType('Vec<EventRecord>', block.events);
             eventRecords.forEach((record) => {
                 const data = record.event.data.toString();
                 console.log(block.number, data, record.event.section, record.event.method);
