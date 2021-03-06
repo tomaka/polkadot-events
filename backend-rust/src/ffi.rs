@@ -223,6 +223,13 @@ pub(crate) fn database_save(content: &str) {
     }
 }
 
+/// Notifies the environment of an update of the best block.
+pub fn best_block_update(best_block_number: u64) {
+    // Since Wasm doesn't support 64bits number, any block higher than 2^32 will panic here.
+    let best_block_number = u32::try_from(best_block_number).unwrap();
+    unsafe { bindings::best_block_update(best_block_number) }
+}
+
 /// Implementation of [`log::Log`] that sends out logs to the FFI.
 pub(crate) struct Logger;
 

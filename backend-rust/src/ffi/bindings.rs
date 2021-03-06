@@ -114,6 +114,9 @@ extern "C" {
     /// If `milliseconds` is 0, [`timer_finished`] should be called as soon as possible.
     pub fn start_timer(id: u32, milliseconds: f64);
 
+    /// Client wants to report that the best block is the one passed as parameter.
+    pub fn best_block_update(best_block_number: u32);
+
     /// Client wants to set the content of the database to a UTF-8 string found at offset `ptr`
     /// and with length `len`.
     ///

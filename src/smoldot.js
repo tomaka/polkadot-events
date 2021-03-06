@@ -34,6 +34,7 @@ export async function start(config) {
   const chain_spec = config.chain_spec;
   const database_content = config.database_content;
   const database_save_callback = config.database_save_callback;
+  const best_block_update_callback = config.best_block_update_callback;
   // Maximum level of log entries sent by the client.
   // 0 = Logging disabled, 1 = Error, 2 = Warn, 3 = Info, 4 = Debug, 5 = Trace
   const max_log_level = config.max_log_level || 3;
@@ -142,6 +143,13 @@ export async function start(config) {
               module.exports.timer_finished(id);
             }
           }, ms)
+        }
+      },
+
+      // Update about the current best block.
+      best_block_update: (best_block_number) => {
+        if (best_block_update_callback) {
+          best_block_update_callback(best_block_number);
         }
       },
 

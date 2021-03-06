@@ -156,6 +156,9 @@ fn start_sync(
                             "Finalized block #{}",
                             finalized_blocks.last().unwrap().header.number
                         );
+                        crate::ffi::best_block_update(
+                            finalized_blocks.last().unwrap().header.number,
+                        );
 
                         crate::yield_once().await;
                         process = s.process_one(unix_time);
@@ -179,8 +182,13 @@ fn start_sync(
                             .unwrap();
                     }
 
-                    optimistic::ProcessOne::NewBest { sync: s, .. } => {
+                    optimistic::ProcessOne::NewBest {
+                        sync: s,
+                        new_best_number,
+                        ..
+                    } => {
                         crate::yield_once().await;
+                        crate::ffi::best_block_update(new_best_number);
                         process = s.process_one(unix_time);
                     }
 
