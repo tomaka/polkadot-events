@@ -7,7 +7,7 @@ export default React.memo(({ syncing, blockHeight }) => {
     return (
         <Box>
             {syncing && <CircularProgress size="1em" />} <Typography>{`${syncingText}`}</Typography>
-            <Typography>Current block: #{`${blockHeight}`}</Typography>
+            <Typography>Current block: {`${blockHeight ? ('#' + blockHeight) : '<unknown>'}`}</Typography>
         </Box>
     );
 });

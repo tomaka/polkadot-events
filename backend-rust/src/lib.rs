@@ -186,6 +186,8 @@ pub async fn start_client(chain: ChainConfig, max_log_level: log::LevelFilter) {
         finalized_block_storage
     };
 
+    ffi::best_block_update(chain_information.finalized_block_header.number);
+
     // Starting here, the code below initializes the various "services" that make up the node.
     // Services need to be able to spawn asynchronous tasks on their own. Since "spawning a task"
     // isn't really something that a browser or Node environment can do efficiently, we instead

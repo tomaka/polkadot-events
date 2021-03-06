@@ -23,7 +23,10 @@ use smoldot::{
     chain::chain_information, database::finalized_serialize, executor, libp2p, network,
     sync::optimistic,
 };
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 /// Configuration for a [`SyncService`].
 pub struct Config {
@@ -46,33 +49,22 @@ pub struct Config {
 }
 
 /// Background task that verifies blocks and emits requests.
+// TODO: remove or something?
 pub struct SyncService {}
 
 impl SyncService {
     /// Initializes the [`SyncService`] with the given configuration.
     pub async fn new(mut config: Config) -> Arc<Self> {
-        let (to_database, messages_rx) = mpsc::channel(4);
-
         (config.tasks_executor)(Box::pin(start_sync(
             config.chain_information,
             config.finalized_storage,
             config.network_service.0,
             config.network_service.1,
             config.network_events_receiver,
-            to_database,
         )));
-
-        (config.tasks_executor)(Box::pin(start_database_write(messages_rx)));
 
         Arc::new(SyncService {})
     }
-}
-
-enum ToDatabase {
-    FinalizedBlocks {
-        blocks: Vec<optimistic::Block<()>>,
-        serialized_finalized_chain: String,
-    },
 }
 
 /// Returns the background task of the sync service.
@@ -82,12 +74,36 @@ fn start_sync(
     network_service: Arc<network_service::NetworkService>,
     network_chain_index: usize,
     mut from_network_service: mpsc::Receiver<network_service::Event>,
-    mut to_database: mpsc::Sender<ToDatabase>,
 ) -> impl Future<Output = ()> {
     // Holds, in parallel of the database, the storage of the latest finalized block.
     // At the time of writing, this state is stable around ~3MiB for Polkadot, meaning that it is
     // completely acceptable to hold it entirely in memory.
     let mut finalized_block_storage = initial_finalized_storage;
+
+    let vm = smoldot::executor::host::HostVmPrototype::new(
+        &finalized_block_storage.get(&b":code"[..]).unwrap(),
+        smoldot::executor::storage_heap_pages_to_value(
+            finalized_block_storage
+                .get(&b":heappages"[..])
+                .as_ref()
+                .map(|v| v.as_ref()),
+        )
+        .unwrap(),
+        smoldot::executor::vm::ExecHint::Oneshot,
+    )
+    .unwrap();
+    let (runtime_spec, vm) = smoldot::executor::core_version(vm).unwrap();
+    let mut finalized_runtime_version = runtime_spec.decode().spec_version;
+    let mut finalized_metadata = {
+        let query = smoldot::metadata::query_metadata(vm);
+        loop {
+            match query {
+                smoldot::metadata::Query::StorageGet(_) => todo!(),
+                smoldot::metadata::Query::Finished(Ok((metadata, _))) => break metadata,
+                smoldot::metadata::Query::Finished(Err(err)) => panic!("{}", err),
+            }
+        }
+    };
 
     let mut sync = optimistic::OptimisticSync::<_, libp2p::PeerId, ()>::new(optimistic::Config {
         chain_information: initial_chain_information,
@@ -168,8 +184,17 @@ fn start_sync(
 
                         crate::yield_once().await;
 
-                        // TODO: maybe write in a separate task? but then we can't access the finalized storage immediately after?
-                        for block in &finalized_blocks {
+                        let serialized_finalized_chain = finalized_serialize::encode_chain_storage(
+                            s.as_chain_information(),
+                            Some(finalized_block_storage.iter()),
+                        );
+
+                        process = s.process_one(unix_time);
+
+                        let mut new_metadata = HashMap::new();
+                        let mut blocks_save = Vec::new();
+
+                        for block in finalized_blocks {
                             for (key, value) in &block.storage_top_trie_changes {
                                 if let Some(value) = value {
                                     finalized_block_storage.insert(key.clone(), value.clone());
@@ -179,22 +204,75 @@ fn start_sync(
                                     // assert!(_was_there.is_some());
                                 }
                             }
+
+                            if let Some(code) = block.storage_top_trie_changes.get(&b":code"[..]) {
+                                let vm = smoldot::executor::host::HostVmPrototype::new(
+                                    &code.as_ref().unwrap(),
+                                    smoldot::executor::DEFAULT_HEAP_PAGES, // TODO:
+                                    smoldot::executor::vm::ExecHint::Oneshot,
+                                )
+                                .unwrap();
+                                let (runtime_spec, vm) =
+                                    smoldot::executor::core_version(vm).unwrap();
+                                finalized_runtime_version = runtime_spec.decode().spec_version;
+                                finalized_metadata = {
+                                    let query = smoldot::metadata::query_metadata(vm);
+                                    loop {
+                                        match query {
+                                            smoldot::metadata::Query::StorageGet(_) => todo!(),
+                                            smoldot::metadata::Query::Finished(Ok((
+                                                metadata,
+                                                _,
+                                            ))) => break metadata,
+                                            smoldot::metadata::Query::Finished(Err(err)) => {
+                                                panic!("{}", err)
+                                            }
+                                        }
+                                    }
+                                };
+
+                                new_metadata.insert(
+                                    finalized_runtime_version,
+                                    smoldot::json_rpc::methods::HexString(
+                                        finalized_metadata.clone(),
+                                    ),
+                                );
+                            } else if block.header.number == 1 {
+                                new_metadata.insert(
+                                    finalized_runtime_version,
+                                    smoldot::json_rpc::methods::HexString(
+                                        finalized_metadata.clone(),
+                                    ),
+                                );
+                            }
+
+                            let finalized_metadata =
+                                smoldot::metadata::decode(&finalized_metadata).unwrap();
+                            let events_storage_key =
+                                smoldot::metadata::events::events_storage_key(finalized_metadata)
+                                    .unwrap();
+                            let events_encoded = if let Some(value) =
+                                block.storage_top_trie_changes.get(&events_storage_key[..])
+                            {
+                                value
+                            } else {
+                                todo!()
+                            };
+
+                            blocks_save.push(ffi::DatabaseSaveBlock {
+                                number: block.header.number,
+                                runtime_spec: finalized_runtime_version,
+                                events: smoldot::json_rpc::methods::HexString(
+                                    events_encoded.clone().unwrap(),
+                                ),
+                            });
                         }
 
-                        let serialized_finalized_chain = finalized_serialize::encode_chain_storage(
-                            s.as_chain_information(),
-                            Some(finalized_block_storage.iter()),
-                        );
-
-                        process = s.process_one(unix_time);
-
-                        to_database
-                            .send(ToDatabase::FinalizedBlocks {
-                                blocks: finalized_blocks,
-                                serialized_finalized_chain,
-                            })
-                            .await
-                            .unwrap();
+                        ffi::database_save(&ffi::DatabaseSave {
+                            chain: &serialized_finalized_chain,
+                            new_metadata,
+                            blocks: blocks_save,
+                        });
                     }
 
                     optimistic::ProcessOne::NewBest {
@@ -332,167 +410,4 @@ fn start_sync(
             }
         }
     }
-}
-
-/// Starts the task that writes blocks to the database.
-async fn start_database_write(mut messages_rx: mpsc::Receiver<ToDatabase>) {
-    // TODO: restore
-    while let Some(ToDatabase::FinalizedBlocks {
-        blocks,
-        serialized_finalized_chain,
-    }) = messages_rx.next().await
-    {
-        ffi::database_save(&ffi::DatabaseSave {
-            chain: &serialized_finalized_chain,
-        });
-    }
-
-    /*let finalized_block_hash = database.finalized_block_hash().unwrap();
-
-    let vm = smoldot::executor::host::HostVmPrototype::new(
-        &database
-            .finalized_block_storage_top_trie_get(&finalized_block_hash, b":code")
-            .unwrap()
-            .unwrap()
-            .as_ref(),
-        smoldot::executor::storage_heap_pages_to_value(
-            database
-                .finalized_block_storage_top_trie_get(&finalized_block_hash, b":heappages")
-                .unwrap()
-                .as_ref()
-                .map(|v| v.as_ref()),
-        )
-        .unwrap(),
-        smoldot::executor::vm::ExecHint::Oneshot,
-    )
-    .unwrap();
-    let (runtime_spec, vm) = smoldot::executor::core_version(vm).unwrap();
-    let mut finalized_runtime_version = runtime_spec.decode().spec_version;
-    let mut finalized_metadata = smoldot::metadata::metadata_from_virtual_machine_prototype(vm)
-        .unwrap()
-        .0;
-
-    let mut events_database = if let Some(events_db) = major_sync_export_events_sqlite.as_ref() {
-        let mut insert_metadata = events_db
-            .prepare(
-                "
-                INSERT INTO metadata(runtime_version, metadata)
-                VALUES(?, ?)
-                ON CONFLICT(runtime_version) DO UPDATE SET metadata=excluded.metadata
-            ",
-            )
-            .unwrap();
-
-        insert_metadata
-            .bind(1, i64::try_from(finalized_runtime_version).unwrap())
-            .unwrap();
-        insert_metadata.bind(2, &finalized_metadata[..]).unwrap();
-        insert_metadata.next().unwrap();
-
-        let insert_events = events_db
-            .prepare(
-                "
-                INSERT INTO events(block_height, runtime_version, events_storage)
-                VALUES(?, ?, ?)
-                ON CONFLICT(block_height) DO UPDATE
-                SET runtime_version=excluded.runtime_version, events_storage=excluded.events_storage
-            ",
-            )
-            .unwrap();
-
-        Some((
-            SqliteStmtSendHack(insert_events),
-            SqliteStmtSendHack(insert_metadata),
-        ))
-    } else {
-        None
-    };
-
-    loop {
-        match messages_rx.next().await {
-            None => break,
-            Some(ToDatabase::FinalizedBlocks(finalized_blocks)) => {
-                let new_finalized_hash = if let Some(last_finalized) = finalized_blocks.last() {
-                    Some(last_finalized.header.hash())
-                } else {
-                    None
-                };
-
-                for block in finalized_blocks {
-                    if let Some((insert_events, insert_metadata)) = events_database.as_mut() {
-                        if let Some(code) = block.storage_top_trie_changes.get(&b":code"[..]) {
-                            let vm = smoldot::executor::host::HostVmPrototype::new(
-                                &code.as_ref().unwrap(),
-                                smoldot::executor::DEFAULT_HEAP_PAGES, // TODO:
-                                smoldot::executor::vm::ExecHint::Oneshot,
-                            )
-                            .unwrap();
-                            let (runtime_spec, vm) = smoldot::executor::core_version(vm).unwrap();
-                            finalized_runtime_version = runtime_spec.decode().spec_version;
-                            finalized_metadata =
-                                smoldot::metadata::metadata_from_virtual_machine_prototype(vm)
-                                    .unwrap()
-                                    .0;
-
-                            insert_metadata.reset().unwrap();
-                            insert_metadata
-                                .bind(1, i64::try_from(finalized_runtime_version).unwrap())
-                                .unwrap();
-                            insert_metadata.bind(2, &finalized_metadata[..]).unwrap();
-                            insert_metadata.next().unwrap();
-                        }
-
-                        let finalized_metadata =
-                            smoldot::metadata::decode(&finalized_metadata).unwrap();
-                        let events_storage_key =
-                            smoldot::metadata::events::events_storage_key(finalized_metadata)
-                                .unwrap();
-                        let events_encoded = if let Some(value) =
-                            block.storage_top_trie_changes.get(&events_storage_key[..])
-                        {
-                            value
-                        } else {
-                            todo!()
-                        };
-
-                        insert_events.reset().unwrap();
-                        insert_events
-                            .bind(1, i64::try_from(block.header.number).unwrap())
-                            .unwrap();
-                        insert_events
-                            .bind(2, i64::try_from(finalized_runtime_version).unwrap())
-                            .unwrap();
-                        insert_events
-                            .bind(3, &events_encoded.as_ref().unwrap()[..])
-                            .unwrap();
-                        insert_events.next().unwrap();
-                    }
-
-                    // TODO: overhead for building the SCALE encoding of the header
-                    let result = database.insert(
-                        &block.header.scale_encoding().fold(Vec::new(), |mut a, b| {
-                            a.extend_from_slice(b.as_ref());
-                            a
-                        }),
-                        true, // TODO: is_new_best?
-                        block.body.iter(),
-                        block
-                            .storage_top_trie_changes
-                            .iter()
-                            .map(|(k, v)| (k, v.as_ref())),
-                    );
-
-                    match result {
-                        Ok(()) => {}
-                        Err(full_sled::InsertError::Duplicate) => {} // TODO: this should be an error ; right now we silence them because non-finalized blocks aren't loaded from the database at startup, resulting in them being downloaded again
-                        Err(err) => panic!("{}", err),
-                    }
-                }
-
-                if let Some(new_finalized_hash) = new_finalized_hash {
-                    database.set_finalized(&new_finalized_hash).unwrap();
-                }
-            }
-        }
-    }*/
 }

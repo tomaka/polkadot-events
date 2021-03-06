@@ -34,7 +34,7 @@ use futures::{
     prelude::*,
 };
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     sync::{atomic, Arc, Mutex},
 };
 
@@ -217,6 +217,15 @@ impl Sub<Instant> for Instant {
 #[derive(serde::Serialize)]
 pub(crate) struct DatabaseSave<'a> {
     pub(crate) chain: &'a str,
+    pub(crate) new_metadata: HashMap<u32, smoldot::json_rpc::methods::HexString>,
+    pub(crate) blocks: Vec<DatabaseSaveBlock>,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct DatabaseSaveBlock {
+    pub number: u64,
+    pub runtime_spec: u32,
+    pub events: smoldot::json_rpc::methods::HexString,
 }
 
 /// Merges the argument into the database.

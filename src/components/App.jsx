@@ -11,7 +11,7 @@ export default class extends React.Component {
         super(props);
         this.state = {
             chainSpec: props.chainSpec,
-            currentBlockHeight: 0,
+            currentBlockHeight: null,
         };
     }
 
@@ -38,6 +38,7 @@ export default class extends React.Component {
                 chain_spec: JSON.stringify(this.state.chainSpec),
                 database_content: database_content,
                 database_save_callback: (to_save) => {
+                    console.log(to_save);
                     (async () => {
                         const tx = database.transaction(['meta', 'blocks'], 'readwrite');
                         await Promise.all([
