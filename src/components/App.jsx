@@ -73,11 +73,12 @@ export default class extends React.Component {
                     undecoded_metadata = await this.state.database.get('metadata', block.runtime_spec);
                 }
 
+                console.log(undecoded_metadata);
                 const metadata = new Metadata(this.registry, undecoded_metadata.metadata);
                 this.registry.setMetadata(metadata);
             }
 
-            console.log(block.events);
+            console.log(block.number, block.events);
             const eventRecords = this.registry.createType('Vec<EventRecord>', block.events, true);
             eventRecords.forEach((record) => {
                 const data = record.event.data.toString();
