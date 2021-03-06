@@ -139,6 +139,12 @@ fn start_sync(
                         previous_best_height,
                         reason,
                     } => {
+                        log::warn!(
+                            "Consensus issue above block #{}: {}",
+                            previous_best_height,
+                            reason
+                        );
+
                         crate::yield_once().await;
                         process = s.process_one(unix_time);
                     }
@@ -146,6 +152,11 @@ fn start_sync(
                         sync: s,
                         finalized_blocks,
                     } => {
+                        log::info!(
+                            "Finalized block #{}",
+                            finalized_blocks.last().unwrap().header.number
+                        );
+
                         crate::yield_once().await;
                         process = s.process_one(unix_time);
 
