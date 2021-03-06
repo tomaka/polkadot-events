@@ -98,7 +98,7 @@ export default class extends React.Component {
 
             const eventRecords = this.registry.createType('Vec<EventRecord>', block.events);
             eventRecords.forEach((record, recordIndex) => {
-                record.event.meta.args.forReach((arg, argIndex) => {
+                record.event.meta.args.forEach((arg, argIndex) => {
                     if (arg == 'AccountId') {
                         eventsToStore.push({
                             account: record.event.data[argIndex].toString(),
