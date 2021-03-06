@@ -217,8 +217,14 @@ impl Sub<Instant> for Instant {
 #[derive(serde::Serialize)]
 pub(crate) struct DatabaseSave<'a> {
     pub(crate) chain: &'a str,
-    pub(crate) new_metadata: HashMap<u32, smoldot::json_rpc::methods::HexString>,
+    pub(crate) new_metadata: Vec<DatabaseSaveMetadata>,
     pub(crate) blocks: Vec<DatabaseSaveBlock>,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct DatabaseSaveMetadata {
+    pub runtime_spec: u32,
+    pub metadata: smoldot::json_rpc::methods::HexString,
 }
 
 #[derive(serde::Serialize)]

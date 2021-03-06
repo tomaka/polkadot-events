@@ -191,8 +191,8 @@ fn start_sync(
 
                         process = s.process_one(unix_time);
 
-                        let mut new_metadata = HashMap::new();
-                        let mut blocks_save = Vec::new();
+                        let mut new_metadata = Vec::new();
+                        let mut blocks_save = Vec::with_capacity(finalized_blocks.len());
 
                         for block in finalized_blocks {
                             for (key, value) in &block.storage_top_trie_changes {
@@ -231,19 +231,19 @@ fn start_sync(
                                     }
                                 };
 
-                                new_metadata.insert(
-                                    finalized_runtime_version,
-                                    smoldot::json_rpc::methods::HexString(
+                                new_metadata.push(ffi::DatabaseSaveMetadata {
+                                    runtime_spec: finalized_runtime_version,
+                                    metadata: smoldot::json_rpc::methods::HexString(
                                         finalized_metadata.clone(),
                                     ),
-                                );
+                                });
                             } else if block.header.number == 1 {
-                                new_metadata.insert(
-                                    finalized_runtime_version,
-                                    smoldot::json_rpc::methods::HexString(
+                                new_metadata.push(ffi::DatabaseSaveMetadata {
+                                    runtime_spec: finalized_runtime_version,
+                                    metadata: smoldot::json_rpc::methods::HexString(
                                         finalized_metadata.clone(),
                                     ),
-                                );
+                                });
                             }
 
                             let finalized_metadata =
