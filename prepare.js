@@ -27,13 +27,11 @@ const build_profile = 'release';
 // Note: the Rust version is pinned because the wasi target is still unstable. Without pinning, it
 // is possible for the wasm-js bindings to change between two Rust versions. Feel free to update
 // this version pin whenever you like, provided it continues to build.
-
-// TODO: restore
-/*child_process.execSync(
+child_process.execSync(
     "cargo +1.48.0 build --manifest-path ./backend-rust/Cargo.toml --target wasm32-wasi --no-default-features"
     + (build_profile == 'debug' ? '' : ' --' + build_profile),
     { 'stdio': 'inherit' }
-);*/
+);
 
 // It is then picked up by `wasm-opt`, which optimizes it and generates `./autogen/tmp.wasm`.
 // `wasm_opt` is purely about optimizing. If it isn't available, it is also possible to directly

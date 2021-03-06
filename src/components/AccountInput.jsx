@@ -20,9 +20,8 @@ export default React.memo(({ setAddress }) => {
             onFocus={handleChangeButton}
             onBlur={handleChangeButton}
             label="Account address"
-            value={address}
+            value={address != null ? address : ''}
             helperText="Name of the accounts whose events to scrap"
-            defaultValue=""
             variant="standard"
         />
     );
