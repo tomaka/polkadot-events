@@ -41,10 +41,10 @@ export default class extends React.Component {
                     (async () => {
                         const tx = database.transaction(['meta', 'blocks'], 'readwrite');
                         await Promise.all([
-                            tx.objectStore('meta').put('chain', to_save.chain),
+                            tx.objectStore('meta').put(to_save.chain, 'chain'),
                             tx.done,
                         ]);
-                    });
+                    })();
                 },
                 best_block_update_callback: (num) => {
                     this.setState({

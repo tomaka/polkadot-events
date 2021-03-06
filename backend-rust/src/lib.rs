@@ -27,7 +27,7 @@ use smoldot::{
     chain, chain_spec,
     libp2p::{multiaddr, peer_id::PeerId},
 };
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, iter, sync::Arc};
 
 pub mod ffi;
 
@@ -128,10 +128,7 @@ pub struct ChainConfig {
 }
 
 /// Starts a client running the given chain specifications.
-pub async fn start_client(
-    chains: impl Iterator<Item = ChainConfig>,
-    max_log_level: log::LevelFilter,
-) {
+pub async fn start_client(chain: ChainConfig, max_log_level: log::LevelFilter) {
     // Try initialize the logging and the panic hook.
     // Note that `start_client` can theoretically be called multiple times, meaning that these
     // calls shouldn't panic if reached multiple times.
@@ -145,86 +142,49 @@ pub async fn start_client(
     assert_ne!(rand::random::<u64>(), 0);
     assert_ne!(rand::random::<u64>(), rand::random::<u64>());
 
-    // Decode the chain specifications and database content.
-    // Any error while decoding is treated as if there was no database.
-    let (chain_specs, database_content) = {
-        let mut chain_specs = Vec::new();
-        let mut database_content = Vec::new();
-
-        for chain in chains {
-            chain_specs.push(
-                match chain_spec::ChainSpec::from_json_bytes(&chain.specification) {
-                    Ok(cs) => {
-                        log::info!("Loaded chain specs for {}", cs.name());
-                        cs
-                    }
-                    Err(err) => ffi::throw(format!("Error while opening chain specs: {}", err)),
-                },
-            );
-
-            database_content.push(if let Some(database_content) = &chain.database_content {
-                match smoldot::database::finalized_serialize::decode_chain(database_content) {
-                    Ok((parsed, _)) => Some(parsed),
-                    Err(error) => {
-                        log::warn!("Failed to decode chain information: {}", error);
-                        None
-                    }
-                }
-            } else {
-                None
-            });
+    // Decode the chain specifications.
+    let chain_spec = match chain_spec::ChainSpec::from_json_bytes(&chain.specification) {
+        Ok(cs) => {
+            log::info!("Loaded chain specs for {}", cs.name());
+            cs
         }
-
-        (chain_specs, database_content)
+        Err(err) => ffi::throw(format!("Error while opening chain specs: {}", err)),
     };
 
     // Load the information about the chains from the chain specs. If a light sync state is
     // present in the chain specs, it is possible to start sync at the finalized block it
     // describes.
-    let genesis_chain_information = chain_specs
-        .iter()
-        .map(|chain_spec| {
-            chain::chain_information::ChainInformation::from_genesis_storage(
-                chain_spec.genesis_storage(),
-            )
-            .unwrap()
-        })
-        .collect::<Vec<_>>();
-    let chain_information = chain_specs
-        .iter()
-        .zip(database_content.into_iter())
-        .zip(genesis_chain_information.iter())
-        .map(
-            |((chain_spec, database_content), genesis_chain_information)| {
-                let base = if let Some(light_sync_state) = chain_spec.light_sync_state() {
-                    log::info!(
-                        "Using light checkpoint starting at #{}",
-                        light_sync_state
-                            .as_chain_information()
-                            .finalized_block_header
-                            .number
-                    );
-                    light_sync_state.as_chain_information()
-                } else {
-                    genesis_chain_information.clone()
-                };
-
-                // Only use the existing database if it is ahead of `base`.
-                if let Some(database_content) = database_content {
-                    if database_content.finalized_block_header.number
-                        > base.finalized_block_header.number
-                    {
-                        database_content
-                    } else {
-                        log::info!("Skipping database as it is older than checkpoint");
-                        base
-                    }
-                } else {
-                    base
-                }
-            },
+    let genesis_chain_information =
+        chain::chain_information::ChainInformation::from_genesis_storage(
+            chain_spec.genesis_storage(),
         )
-        .collect::<Vec<_>>();
+        .unwrap();
+
+    // Any error while decoding is treated as if there was no database.
+    let (chain_information, finalized_storage) =
+        if let Some(database_content) = &chain.database_content {
+            match smoldot::database::finalized_serialize::decode_chain(database_content) {
+                Ok((parsed, Some(finalized_storage))) => ((parsed, Some(finalized_storage))),
+                Ok((_, None)) => (genesis_chain_information.clone(), None),
+                Err(error) => {
+                    log::warn!("Failed to decode chain information: {}", error);
+                    (genesis_chain_information.clone(), None)
+                }
+            }
+        } else {
+            (genesis_chain_information.clone(), None)
+        };
+    let finalized_storage = if let Some(s) = finalized_storage {
+        // Note: the database decoding code returns a `HashMap` while we need a `BTreeMap`.
+        // This is a small, mostly harmless, inefficiency.
+        s.into_iter().collect()
+    } else {
+        let mut finalized_block_storage = BTreeMap::<Vec<u8>, Vec<u8>>::new();
+        for (key, value) in chain_spec.genesis_storage() {
+            finalized_block_storage.insert(key.to_owned(), value.to_owned());
+        }
+        finalized_block_storage
+    };
 
     // Starting here, the code below initializes the various "services" that make up the node.
     // Services need to be able to spawn asynchronous tasks on their own. Since "spawning a task"
@@ -255,82 +215,56 @@ pub async fn start_client(
                             let new_task_tx = new_task_tx.clone();
                             move |fut| new_task_tx.unbounded_send(fut).unwrap()
                         }),
-                        num_events_receivers: chain_information.len(), // Configures the length of `network_event_receivers`
-                        chains: chain_information
-                            .iter()
-                            .zip(chain_specs.iter())
-                            .zip(genesis_chain_information.iter())
-                            .map(|((chain_information, chain_spec), genesis_chain_information)| {
-                                network_service::ConfigChain {
-                                    bootstrap_nodes: {
-                                        let mut list =
-                                            Vec::with_capacity(chain_spec.boot_nodes().len());
-                                        for node in chain_spec.boot_nodes() {
-                                            let mut address: multiaddr::Multiaddr =
-                                                node.parse().unwrap(); // TODO: don't unwrap?
-                                            if let Some(multiaddr::Protocol::P2p(peer_id)) =
-                                                address.pop()
-                                            {
-                                                let peer_id =
-                                                    PeerId::from_multihash(peer_id).unwrap(); // TODO: don't unwrap
-                                                list.push((peer_id, address));
-                                            } else {
-                                                panic!() // TODO:
-                                            }
-                                        }
-                                        list
-                                    },
-                                    has_grandpa_protocol: matches!(
-                                        genesis_chain_information.finality,
-                                        chain::chain_information::ChainInformationFinality::Grandpa { .. }
-                                    ),
-                                    genesis_block_hash: genesis_chain_information
-                                        .finalized_block_header
-                                        .hash(),
-                                    best_block: (
-                                        chain_information.finalized_block_header.number,
-                                        chain_information.finalized_block_header.hash(),
-                                    ),
-                                    protocol_id: chain_spec.protocol_id().to_string(),
+                        num_events_receivers: 1, // Configures the length of `network_event_receivers`
+                        chains: iter::once(network_service::ConfigChain {
+                            bootstrap_nodes: {
+                                let mut list = Vec::with_capacity(chain_spec.boot_nodes().len());
+                                for node in chain_spec.boot_nodes() {
+                                    let mut address: multiaddr::Multiaddr = node.parse().unwrap(); // TODO: don't unwrap?
+                                    if let Some(multiaddr::Protocol::P2p(peer_id)) = address.pop() {
+                                        let peer_id = PeerId::from_multihash(peer_id).unwrap(); // TODO: don't unwrap
+                                        list.push((peer_id, address));
+                                    } else {
+                                        panic!() // TODO:
+                                    }
                                 }
-                            })
-                            .collect(),
+                                list
+                            },
+                            has_grandpa_protocol: matches!(
+                                genesis_chain_information.finality,
+                                chain::chain_information::ChainInformationFinality::Grandpa { .. }
+                            ),
+                            genesis_block_hash: genesis_chain_information
+                                .finalized_block_header
+                                .hash(),
+                            best_block: (
+                                chain_information.finalized_block_header.number,
+                                chain_information.finalized_block_header.hash(),
+                            ),
+                            protocol_id: chain_spec.protocol_id().to_string(),
+                        })
+                        .collect(),
                     })
                     .await;
 
-                // The network service is the only one in common between all chains. Other
-                // services run once per chain.
-                for (chain_index, ((chain_information, chain_spec), genesis_chain_information)) in
-                    chain_information
-                        .iter()
-                        .zip(chain_specs.into_iter())
-                        .zip(genesis_chain_information.iter())
-                        .enumerate()
-                {
-                    // The sync service is leveraging the network service, downloads block headers,
-                    // and verifies them, to determine what are the best and finalized blocks of the
-                    // chain.
-                    let sync_service = Arc::new(
-                        sync_service::SyncService::new(sync_service::Config {
-                            chain_information: chain_information.clone(),
-                            finalized_storage: {
-                                let mut finalized_block_storage = BTreeMap::<Vec<u8>, Vec<u8>>::new();
-                                for (key, value) in  chain_spec.genesis_storage() {
-                                    finalized_block_storage.insert(key.to_owned(), value.to_owned());
-                                }finalized_block_storage
-                            },
-                            tasks_executor: Box::new({
-                                let new_task_tx = new_task_tx.clone();
-                                move |fut| new_task_tx.unbounded_send(fut).unwrap()
-                            }),
-                            network_service: (network_service.clone(), chain_index),
-                            network_events_receiver: network_event_receivers.pop().unwrap(),
-                        })
-                        .await,
-                    );
+                // The sync service is leveraging the network service, downloads block headers,
+                // and verifies them, to determine what are the best and finalized blocks of the
+                // chain.
+                let sync_service = Arc::new(
+                    sync_service::SyncService::new(sync_service::Config {
+                        chain_information: chain_information.clone(),
+                        finalized_storage,
+                        tasks_executor: Box::new({
+                            let new_task_tx = new_task_tx.clone();
+                            move |fut| new_task_tx.unbounded_send(fut).unwrap()
+                        }),
+                        network_service: (network_service.clone(), 0),
+                        network_events_receiver: network_event_receivers.pop().unwrap(),
+                    })
+                    .await,
+                );
 
-                    log::info!("Initialization complete");
-                }
+                log::info!("Initialization complete");
             }
             .boxed(),
         )

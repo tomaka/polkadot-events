@@ -491,10 +491,10 @@ fn init(
     };
 
     spawn_task(super::start_client(
-        iter::once(super::ChainConfig {
+        super::ChainConfig {
             specification: chain_specs,
             database_content,
-        }),
+        },
         max_log_level,
     ));
 }
