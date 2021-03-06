@@ -33,8 +33,6 @@ export async function start(config) {
 
   const chain_spec = config.chain_spec;
   const database_content = config.database_content;
-  const relay_chain_spec = config.relay_chain_spec;
-  const json_rpc_callback = config.json_rpc_callback;
   const database_save_callback = config.database_save_callback;
   // Maximum level of log entries sent by the client.
   // 0 = Logging disabled, 1 = Error, 2 = Warn, 3 = Info, 4 = Debug, 5 = Trace
@@ -98,14 +96,6 @@ export async function start(config) {
 
         let message = Buffer.from(module.exports.memory.buffer).toString('utf8', ptr, ptr + len);
         throw new SmoldotError(message);
-      },
-
-      // Used by the Rust side to emit a JSON-RPC response or subscription notification.
-      json_rpc_respond: (ptr, len) => {
-        let message = Buffer.from(module.exports.memory.buffer).toString('utf8', ptr, ptr + len);
-        if (json_rpc_callback) {
-          json_rpc_callback(message);
-        }
       },
 
       // Used by the Rust side to emit a log entry.
@@ -228,7 +218,7 @@ export async function start(config) {
               if (connection.destroyed) return;
               module.exports.connection_closed(id);
             });
-            connection.on('error', () => {});
+            connection.on('error', () => { });
             connection.on('data', (message) => {
               if (connection.destroyed) return;
               let ptr = module.exports.alloc(message.length);
@@ -409,17 +399,9 @@ export async function start(config) {
       .write(database_content, database_ptr);
   }
 
-  let relay_chain_spec_len = relay_chain_spec ? Buffer.byteLength(relay_chain_spec, 'utf8') : 0;
-  let relay_chain_spec_ptr = (relay_chain_spec_len != 0) ? module.exports.alloc(relay_chain_spec_len) : 0;
-  if (relay_chain_spec_len != 0) {
-    Buffer.from(module.exports.memory.buffer)
-      .write(relay_chain_spec, relay_chain_spec_ptr);
-  }
-
   module.exports.init(
     chain_spec_ptr, chain_spec_len,
     database_ptr, database_len,
-    relay_chain_spec_ptr, relay_chain_spec_len,
     max_log_level
   );
 

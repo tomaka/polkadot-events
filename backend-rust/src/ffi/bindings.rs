@@ -68,13 +68,6 @@ extern "C" {
     /// behave like `abort` and prevent any further execution.
     pub fn throw(message_ptr: u32, message_len: u32);
 
-    /// Client is emitting a response to a previous JSON-RPC request sent using [`json_rpc_send`].
-    /// Also used to send subscriptions notifications.
-    ///
-    /// The response or notification is a UTF-8 string found in the memory of the WebAssembly
-    /// virtual machine at offset `ptr` and with length `len`.
-    pub fn json_rpc_respond(ptr: u32, len: u32);
-
     /// Client is emitting a log entry.
     ///
     /// Each log entry is made of a log level (1 = Error, 2 = Warn, 3 = Info, 4 = Debug,
@@ -195,17 +188,14 @@ pub extern "C" fn alloc(len: u32) -> u32 {
 
 /// Initializes the client.
 ///
-/// Use [`alloc`] to allocate either one to three buffers: one for the chain specs, an optional
-/// one for the database content, and an optional one for the chain specs of the relay chain if
-/// the chain is a parachain.
+/// Use [`alloc`] to allocate either one to two buffers: one for the chain specs, and an optional
+/// one for the database content.
 /// The buffers **must** have been allocated with [`alloc`]. They are freed when this function is
 /// called.
 ///
-/// Write the chain specs, the database content, and the relay chain specs in these three buffers.
+/// Write the chain specs and the database content in these two buffers.
 /// Then, pass the pointer and length of these buffers to this function.
 /// Pass `0` for `database_content_ptr` and `database_content_len` if the database is empty.
-/// Pass `0` for `relay_chain_specs_ptr` and `relay_chain_specs_len` if the chain is not a
-/// parachain.
 ///
 /// The client will emit log messages by calling the [`log()`] function, provided the log level is
 /// inferior or equal to the value of `max_log_level` passed here.
@@ -215,8 +205,6 @@ pub extern "C" fn init(
     chain_specs_len: u32,
     database_content_ptr: u32,
     database_content_len: u32,
-    relay_chain_specs_ptr: u32,
-    relay_chain_specs_len: u32,
     max_log_level: u32,
 ) {
     super::init(
@@ -224,27 +212,8 @@ pub extern "C" fn init(
         chain_specs_len,
         database_content_ptr,
         database_content_len,
-        relay_chain_specs_ptr,
-        relay_chain_specs_len,
         max_log_level,
     )
-}
-
-/// Emit a JSON-RPC request. If the initialization (see [`init`]) hasn't been started or hasn't
-/// finished yet, the request will still be queued.
-///
-/// A buffer containing a UTF-8 JSON-RPC request must be passed as parameter. The format of the
-/// JSON-RPC requests is described in
-/// [the standard JSON-RPC 2.0 specifications](https://www.jsonrpc.org/specification). A pub-sub
-/// extension is supported.
-///
-/// The buffer passed as parameter **must** have been allocated with [`alloc`]. It is freed when
-/// this function is called.
-///
-/// Responses and subscriptions notifications are sent back using [`json_rpc_respond`].
-#[no_mangle]
-pub extern "C" fn json_rpc_send(text_ptr: u32, text_len: u32) {
-    super::json_rpc_send(text_ptr, text_len)
 }
 
 /// Must be called in response to [`start_timer`] after the given duration has passed.

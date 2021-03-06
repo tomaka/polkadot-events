@@ -31,12 +31,9 @@ use std::{sync::Arc, time::Duration};
 
 pub mod ffi;
 
-mod json_rpc_service;
 mod lossy_channel;
 mod network_service;
-mod runtime_service;
 mod sync_service;
-mod transactions_service;
 
 // Use the default "system" allocator. In the context of Wasm, this uses the `dlmalloc` library.
 // See <https://github.com/rust-lang/rust/tree/1.47.0/library/std/src/sys/wasm>.
@@ -323,93 +320,9 @@ pub async fn start_client(
                             }),
                             network_service: (network_service.clone(), chain_index),
                             network_events_receiver: network_event_receivers.pop().unwrap(),
-                            parachain: None,
                         })
                         .await,
                     );
-
-                    // TODO: At the moment the JSON-RPC and database save tasks would conflict
-                    // with each other if run multiple times. For now, we only run them for
-                    // chain 0. Doing this properly requires a bigger refactoring of the FFI
-                    // bindings.
-                    if chain_index != 0 {
-                        continue;
-                    }
-
-                    // The transactions service is responsible for sending out transactions over the
-                    // peer-to-peer network and checking whether they got included in blocks.
-                    let transactions_service = Arc::new(
-                        transactions_service::TransactionsService::new(
-                            transactions_service::Config {
-                                tasks_executor: Box::new({
-                                    let new_task_tx = new_task_tx.clone();
-                                    move |fut| new_task_tx.unbounded_send(fut).unwrap()
-                                }),
-                                network_service: (network_service.clone(), chain_index),
-                                sync_service: sync_service.clone(),
-                            },
-                        )
-                        .await,
-                    );
-
-                    // The runtime service follows the runtime of the best block of the chain,
-                    // and allows performing runtime calls.
-                    let runtime_service = runtime_service::RuntimeService::new(runtime_service::Config {
-                        tasks_executor: Box::new({
-                            let new_task_tx = new_task_tx.clone();
-                            move |fut| new_task_tx.unbounded_send(fut).unwrap()
-                        }),
-                        network_service: (network_service.clone(), chain_index),
-                        sync_service: sync_service.clone(),
-                        chain_spec: &chain_spec,
-                        genesis_block_hash: genesis_chain_information
-                            .finalized_block_header
-                            .hash(),
-                        genesis_block_state_root: genesis_chain_information
-                            .finalized_block_header
-                            .state_root,
-                    }).await;
-
-                    // Spawn the JSON-RPC service. It is responsible for answer incoming JSON-RPC
-                    // requests and sending back responses.
-                    new_task_tx
-                        .unbounded_send(
-                            json_rpc_service::start(json_rpc_service::Config {
-                                tasks_executor: Box::new({
-                                    let new_task_tx = new_task_tx.clone();
-                                    move |fut| new_task_tx.unbounded_send(fut).unwrap()
-                                }),
-                                network_service: (network_service.clone(), chain_index),
-                                sync_service: sync_service.clone(),
-                                transactions_service,
-                                runtime_service,
-                                chain_spec,
-                                genesis_block_hash: genesis_chain_information
-                                    .finalized_block_header
-                                    .hash(),
-                                genesis_block_state_root: genesis_chain_information
-                                    .finalized_block_header
-                                    .state_root,
-                            })
-                            .boxed(),
-                        )
-                        .unwrap();
-
-                    // Spawn a task responsible for serializing the chain from the sync service at
-                    // a periodic interval.
-                    new_task_tx
-                        .unbounded_send(
-                            async move {
-                                loop {
-                                    ffi::Delay::new(Duration::from_secs(15)).await;
-                                    log::debug!("Database save start");
-                                    let database_content = sync_service.serialize_chain().await;
-                                    ffi::database_save(&database_content);
-                                }
-                            }
-                            .boxed(),
-                        )
-                        .unwrap();
 
                     log::info!("Initialization complete");
                 }
