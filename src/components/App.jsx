@@ -132,6 +132,8 @@ export default class extends React.Component {
         }));
         promises.push(tx.done);
         await Promise.all(promises);
+
+        console.log("Saved up to block #" + to_save.blocks[to_save.blocks.length - 1].number);
     }
 
     render() {

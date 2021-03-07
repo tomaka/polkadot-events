@@ -13,8 +13,7 @@ export default class extends React.Component {
         };
     }
 
-    handleChangeButton(e) {
-        let address = e.currentTarget.value;
+    handleChangeButton(address) {
         this.props.setAddress(address);
         this.setState({
             address: address,
@@ -42,14 +41,14 @@ export default class extends React.Component {
         return (
             <Autocomplete
                 options={this.state.autocompleteAddresses}
-                autoHighlight
+                freeSolo
+                loading={!this.state.autocompleteAddressesUpToDate}
+                size="small"
+                onInputChange={(e, value) => this.handleChangeButton(value)}
                 renderInput={(params) => (
                     <TextField
                         {...params}
                         required
-                        onChange={(e) => this.handleChangeButton(e)}
-                        onFocus={(e) => this.handleChangeButton(e)}
-                        onBlur={(e) => this.handleChangeButton(e)}
                         label="Account address"
                         value={this.state.address != null ? this.state.address : ''}
                         variant="standard"
