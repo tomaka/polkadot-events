@@ -2,6 +2,8 @@ This repository contains a JavaScript package that connects to the Polkadot bloc
 
 This allows you to get the list of all the events that historically happened on a chain, filteredby account.
 
+Hosted here: https://tomaka.github.io/polkadot-events/
+
 # How to build
 
 ```
