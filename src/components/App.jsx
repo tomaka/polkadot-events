@@ -145,7 +145,7 @@ export default class extends React.Component {
             >
                 <Typography variant="h1">Polkadot events scraper</Typography>
                 <NodeState syncingPaused={this.state.syncingPaused} setSyncingPaused={(paused) => { this.smoldot.set_syncing_paused(paused); this.setState({ syncingPaused: paused }); }} blockHeight={this.state.currentBlockHeight} chainName={this.props.chainSpec.name} />
-                <AccountViewer database={this.state.database} />
+                <AccountViewer chainSpec={this.props.chainSpec} database={this.state.database} />
             </Grid>
         );
     }

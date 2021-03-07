@@ -7,7 +7,7 @@ export default class extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            blocksAndEvents: null,
+            dbEvents: null,
             loading: false,
             rowsPerPage: 10,
             page: 0,
@@ -16,7 +16,7 @@ export default class extends React.Component {
 
     updateAddress(address) {
         this.setState({
-            blocksAndEvents: null,
+            dbEvents: null,
             loading: true,
         });
 
@@ -29,17 +29,8 @@ export default class extends React.Component {
                 cursor = await cursor.continue();
             }
 
-            let blocksAndEvents = [];
-            for (var i in records) {
-                const record = records[i];
-                let block = await this.props.database.get('blocks', record.block);
-                block.recordIndex = record.recordIndex;
-                block.argIndex = record.argIndex;
-                blocksAndEvents.push(block);
-            }
-
             this.setState({
-                blocksAndEvents: blocksAndEvents,
+                dbEvents: records,
                 loading: false,
             });
         })();
@@ -54,8 +45,8 @@ export default class extends React.Component {
                 />
                 {this.state.loading && <CircularProgress />}
 
-                {!this.state.loading && this.state.blocksAndEvents &&
-                    <EventsList database={this.props.database} blocksAndEvents={this.state.blocksAndEvents} />
+                {!this.state.loading && this.state.dbEvents &&
+                    <EventsList chainSpec={this.props.chainSpec} database={this.props.database} dbEvents={this.state.dbEvents} />
                 }
             </>
         );
