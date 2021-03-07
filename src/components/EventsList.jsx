@@ -1,5 +1,5 @@
 import React from 'react';
-import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Typography } from '@material-ui/core';
+import { CircularProgress, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Typography } from '@material-ui/core';
 import { Metadata } from '@polkadot/metadata';
 import { TypeRegistry } from '@polkadot/types';
 import { getSpecTypes, getSpecHasher, getSpecAlias, getSpecExtensions } from '@polkadot/types-known';
@@ -86,6 +86,7 @@ export default class extends React.Component {
     render() {
         return (
             <>
+                {this.state.loading && <CircularProgress />}
                 {!this.state.loading &&
                     <Paper>
                         <TableContainer>
