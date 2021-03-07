@@ -3,7 +3,7 @@ on:
   push:
     branches: [master]
 jobs:
-  deploy-to-ipfs:
+  deploy-to-gh-pages:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -15,6 +15,7 @@ jobs:
           path: ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/yarn.lock') }}
           restore-keys: ${{ runner.os }}-node-
+      - run: rustup install --profile=minimal 1.48.0
       - run: yarn install
       - run: yarn build
       - uses: crazy-max/ghaction-github-pages@v2
