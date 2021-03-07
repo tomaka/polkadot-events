@@ -267,3 +267,11 @@ pub extern "C" fn connection_message(id: u32, ptr: u32, len: u32) {
 pub extern "C" fn connection_closed(id: u32) {
     super::connection_closed(id)
 }
+
+/// Sets whether to pause the syncing process of the node.
+///
+/// Pass a non-zero value for true.
+#[no_mangle]
+pub extern "C" fn set_syncing_paused(boolean: u32) {
+    super::set_syncing_paused(boolean != 0)
+}

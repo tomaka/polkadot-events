@@ -146,6 +146,7 @@ fn start_sync(
 
             // Verify blocks that have been fetched from queries.
             let mut process = sync.process_one(unix_time);
+            let mut num_new_bests = 0;
             loop {
                 match process {
                     optimistic::ProcessOne::Idle { sync: s } => {
@@ -280,8 +281,11 @@ fn start_sync(
                         new_best_number,
                         ..
                     } => {
-                        crate::yield_once().await;
-                        crate::ffi::best_block_update(new_best_number);
+                        num_new_bests += 1;
+                        if num_new_bests % 23 == 0 {
+                            crate::yield_once().await;
+                            crate::ffi::best_block_update(new_best_number);
+                        }
                         process = s.process_one(unix_time);
                     }
 
@@ -317,38 +321,41 @@ fn start_sync(
             // Start requests that need to be started.
             // Note that this is done after calling `process_one`, as the processing of pending
             // blocks can result in new requests but not the contrary.
-            while let Some(action) = sync.next_request_action() {
-                match action {
-                    optimistic::RequestAction::Start {
-                        start,
-                        block_height,
-                        source,
-                        num_blocks,
-                        ..
-                    } => {
-                        let block_request = network_service.clone().blocks_request(
-                            source.clone(),
-                            network_chain_index,
-                            network::protocol::BlocksRequestConfig {
-                                start: network::protocol::BlocksRequestConfigStart::Number(
-                                    block_height,
-                                ),
-                                desired_count: num_blocks,
-                                direction: network::protocol::BlocksRequestDirection::Ascending,
-                                fields: network::protocol::BlocksRequestFields {
-                                    header: true,
-                                    body: true,
-                                    justification: true,
+            // TODO: unpausing the syncing should somehow wake-up this task
+            if !ffi::is_syncing_paused() {
+                while let Some(action) = sync.next_request_action() {
+                    match action {
+                        optimistic::RequestAction::Start {
+                            start,
+                            block_height,
+                            source,
+                            num_blocks,
+                            ..
+                        } => {
+                            let block_request = network_service.clone().blocks_request(
+                                source.clone(),
+                                network_chain_index,
+                                network::protocol::BlocksRequestConfig {
+                                    start: network::protocol::BlocksRequestConfigStart::Number(
+                                        block_height,
+                                    ),
+                                    desired_count: num_blocks,
+                                    direction: network::protocol::BlocksRequestDirection::Ascending,
+                                    fields: network::protocol::BlocksRequestFields {
+                                        header: true,
+                                        body: true,
+                                        justification: true,
+                                    },
                                 },
-                            },
-                        );
+                            );
 
-                        let (rx, abort) = future::abortable(block_request);
-                        let request_id = start.start(abort);
-                        block_requests_finished.push(rx.map(move |r| (request_id, r)));
-                    }
-                    optimistic::RequestAction::Cancel { user_data, .. } => {
-                        user_data.abort();
+                            let (rx, abort) = future::abortable(block_request);
+                            let request_id = start.start(abort);
+                            block_requests_finished.push(rx.map(move |r| (request_id, r)));
+                        }
+                        optimistic::RequestAction::Cancel { user_data, .. } => {
+                            user_data.abort();
+                        }
                     }
                 }
             }

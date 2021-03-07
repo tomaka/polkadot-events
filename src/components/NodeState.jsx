@@ -1,13 +1,25 @@
 import React from 'react';
-import { Box, CircularProgress, Typography } from '@material-ui/core';
+import { Box, FormControlLabel, Switch, Tooltip, Typography } from '@material-ui/core';
 
-export default React.memo(({ syncing, blockHeight }) => {
-    const syncingText = syncing ? 'Syncing' : 'Idle';
-
+export default React.memo(({ syncingPaused, setSyncingPaused, blockHeight, chainName }) => {
     return (
         <Box>
-            {syncing && <CircularProgress size="1em" />} <Typography>{`${syncingText}`}</Typography>
-            <Typography>Current block: {`${blockHeight ? ('#' + blockHeight) : '<unknown>'}`}</Typography>
+            <FormControlLabel
+                control={
+                    <Switch
+                        checked={syncingPaused}
+                        onChange={(event) => {
+                            let paused = event.target.checked;
+                            setSyncingPaused(paused);
+                        }}
+                    />
+                }
+                label="Pause syncing"
+            />
+            <Typography>{chainName}</Typography>
+            <Tooltip title="The node is downloading blocks from the network and verifying them." arrow>
+                <Typography>Current block: {`${blockHeight ? ('#' + blockHeight) : '<unknown>'}`}</Typography>
+            </Tooltip>
         </Box>
     );
 });

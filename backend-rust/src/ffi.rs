@@ -22,19 +22,16 @@ use core::{
     convert::TryFrom as _,
     fmt,
     future::Future,
-    iter, marker,
+    marker,
     ops::{Add, Sub},
     pin::Pin,
     slice,
     task::{Context, Poll, Waker},
     time::Duration,
 };
-use futures::{
-    channel::{mpsc, oneshot},
-    prelude::*,
-};
+use futures::{channel::oneshot, prelude::*};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     sync::{atomic, Arc, Mutex},
 };
 
@@ -211,6 +208,16 @@ impl Sub<Instant> for Instant {
         assert!(ms >= 0.0);
         Duration::from_millis(ms as u64)
     }
+}
+
+static SYNCING_PAUSED: atomic::AtomicBool = atomic::AtomicBool::new(false);
+
+pub(crate) fn is_syncing_paused() -> bool {
+    SYNCING_PAUSED.load(atomic::Ordering::Relaxed)
+}
+
+fn set_syncing_paused(paused: bool) {
+    SYNCING_PAUSED.store(paused, atomic::Ordering::Relaxed)
 }
 
 /// See [`database_save`].

@@ -1,27 +1,26 @@
 import React from 'react';
-import { Box, Typography } from '@material-ui/core';
+import { Grid, Typography } from '@material-ui/core';
 import * as idb from 'idb/with-async-ittr.js';
 import { Metadata } from '@polkadot/metadata';
 import { TypeRegistry } from '@polkadot/types';
-import { getSpecTypes } from '@polkadot/types-known';
+import { getSpecTypes, getSpecHasher, getSpecAlias, getSpecExtensions } from '@polkadot/types-known';
 
 import * as smoldot from './../smoldot.js';
 import { default as AccountViewer } from './AccountViewer.jsx';
 import { default as NodeState } from './NodeState.jsx';
-
-// TODO: good account for testing => 5GEkeVgLtxezLCYDKQ11LcUwotRQwxyDKJsWBx52CsZbLDQB
 
 export default class extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
             currentBlockHeight: null,
+            syncingPaused: false,
         };
     }
 
     componentDidMount() {
         (async () => {
-            let database = await idb.openDB('polkadot-events-scraper', 1, {
+            let database = await idb.openDB('events-scraper-' + this.props.chainSpec.id, 1, {
                 upgrade(db) {
                     const events = db.createObjectStore('events', { keyPath: ['block', 'recordIndex', 'argIndex'] });
                     events.createIndex('account', 'account', { unique: false });
@@ -40,7 +39,7 @@ export default class extends React.Component {
             this.current_runtime_spec = null;
             this.registry = new TypeRegistry();
 
-            this.smoldot = smoldot.start({
+            this.smoldot = await smoldot.start({
                 chain_spec: JSON.stringify(this.props.chainSpec),
                 database_content: database_content,
                 database_save_callback: (to_save) => {
@@ -55,6 +54,8 @@ export default class extends React.Component {
                     });
                 }
             });
+
+            this.smoldot.set_syncing_paused(this.state.paused);
         })();
     }
 
@@ -64,10 +65,12 @@ export default class extends React.Component {
 
     /// To call when smoldot sends back blocks to decode and save in database.
     async blocksFromSmoldot(to_save) {
+        let blocksToStore = [];
         let eventsToStore = [];
 
         for (const blockIndex in to_save.blocks) {
             const block = to_save.blocks[blockIndex];
+            let includeBlock = false;
 
             if (block.runtime_spec != this.current_runtime_spec) {
                 this.current_runtime_spec = block.runtime_spec;
@@ -77,27 +80,23 @@ export default class extends React.Component {
                     undecoded_metadata = await this.state.database.get('metadata', block.runtime_spec);
                 }
 
-                // TODO: finish here?
-                //this.registry.setChainProperties(chainProps || this.registry.getChainProperties());
-                //this.registry.setKnownTypes(this._options);
+                // Inspired from https://github.com/polkadot-js/api/blob/ec76b11666aea72135f899267abf784fc6309156/packages/api/src/base/Init.ts#L83
+                this.registry.setChainProperties(this.props.chainSpec.properties);
                 this.registry.register(getSpecTypes(this.registry, this.props.chainSpec.name, undecoded_metadata.spec_name, block.runtime_spec));
-                //this.registry.setHasher(getSpecHasher(this.registry, chain, version.specName));
-
-                /*if (this.registry.knownTypes.typesBundle) {
-                    this.registry.knownTypes.typesAlias = getSpecAlias(registry, chain, version.specName);
-                }*/
-
+                this.registry.setHasher(getSpecHasher(this.registry, this.props.chainSpec.name, undecoded_metadata.spec_name));
+                if (this.registry.knownTypes.typesBundle) {
+                    this.registry.knownTypes.typesAlias = getSpecAlias(this.registry, this.props.chainSpec.name, undecoded_metadata.spec_name);
+                }
                 const metadata = new Metadata(this.registry, undecoded_metadata.metadata);
-                this.registry.setMetadata(metadata, undefined, {
-                    /*...getSpecExtensions(registry, chain, version.specName),
-                    ...(this._options.signedExtensions || {})*/
-                });
+                this.registry.setMetadata(metadata, undefined, getSpecExtensions(this.registry, this.props.chainSpec.name, undecoded_metadata.spec_name));
             }
 
+            // TODO: properly figure out and/or handle decode failures
             const eventRecords = this.registry.createType('Vec<EventRecord>', block.events);
             eventRecords.forEach((record, recordIndex) => {
                 record.event.meta.args.forEach((arg, argIndex) => {
                     if (arg == 'AccountId') {
+                        includeBlock = true;
                         eventsToStore.push({
                             account: record.event.data[argIndex].toString(),
                             block: block.number,
@@ -106,7 +105,11 @@ export default class extends React.Component {
                         });
                     }
                 });
-            })
+            });
+
+            if (includeBlock) {
+                blocksToStore.push(block);
+            }
         }
 
         // Store everything in the database.
@@ -117,7 +120,7 @@ export default class extends React.Component {
         promises.push(...to_save.new_metadata.map((metadata) => {
             return tx.objectStore('metadata').put(metadata);
         }));
-        promises.push(...to_save.blocks.map((block) => {
+        promises.push(...blocksToStore.map((block) => {
             return tx.objectStore('blocks').put(block);
         }));
         promises.push(...eventsToStore.map((event) => {
@@ -129,11 +132,16 @@ export default class extends React.Component {
 
     render() {
         return (
-            <Box>
+            <Grid
+                container
+                direction="column"
+                justify="center"
+                alignItems="stretch"
+            >
                 <Typography variant="h1">Polkadot events scraper</Typography>
-                <NodeState blockHeight={this.state.currentBlockHeight} syncing="true" />
+                <NodeState syncingPaused={this.state.syncingPaused} setSyncingPaused={(paused) => { this.smoldot.set_syncing_paused(paused); this.setState({ syncingPaused: paused }); }} blockHeight={this.state.currentBlockHeight} chainName={this.props.chainSpec.name} />
                 <AccountViewer database={this.state.database} />
-            </Box>
+            </Grid>
         );
     }
 }

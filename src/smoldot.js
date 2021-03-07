@@ -415,15 +415,8 @@ export async function start(config) {
   );
 
   return {
-    send_json_rpc: (request) => {
-      if (has_thrown) {
-        return;
-      }
-
-      let len = Buffer.byteLength(request, 'utf8');
-      let ptr = module.exports.alloc(len);
-      Buffer.from(module.exports.memory.buffer).write(request, ptr);
-      module.exports.json_rpc_send(ptr, len);
+    set_syncing_paused: (paused) => {
+      module.exports.set_syncing_paused(paused ? 1 : 0);
     }
   }
 }

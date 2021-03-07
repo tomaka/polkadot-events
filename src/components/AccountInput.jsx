@@ -52,7 +52,6 @@ export default class extends React.Component {
                         onBlur={(e) => this.handleChangeButton(e)}
                         label="Account address"
                         value={this.state.address != null ? this.state.address : ''}
-                        helperText="Name of the accounts whose events to scrap"
                         variant="standard"
                         inputProps={{
                             ...params.inputProps

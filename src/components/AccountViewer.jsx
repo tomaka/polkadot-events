@@ -1,15 +1,25 @@
 import React from 'react';
+import { CircularProgress, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow } from '@material-ui/core';
 import { default as AccountInput } from './AccountInput.jsx';
+import { default as EventsList } from './EventsList.jsx';
 
 export default class extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            blocksAndEvents: []
+            blocksAndEvents: null,
+            loading: false,
+            rowsPerPage: 10,
+            page: 0,
         };
     }
 
     updateAddress(address) {
+        this.setState({
+            blocksAndEvents: null,
+            loading: true,
+        });
+
         // TODO: reload periodically?
         (async () => {
             let records = [];
@@ -29,7 +39,8 @@ export default class extends React.Component {
             }
 
             this.setState({
-                blocksAndEvents: blocksAndEvents
+                blocksAndEvents: blocksAndEvents,
+                loading: false,
             });
         })();
     }
@@ -41,9 +52,11 @@ export default class extends React.Component {
                     database={this.props.database}
                     setAddress={(address) => { this.updateAddress(address) }}
                 />
-                {this.state.blocksAndEvents.map((blockEvent, i) => {
-                    return <p key={i}>{blockEvent.number}</p>
-                })}
+                {this.state.loading && <CircularProgress />}
+
+                {!this.state.loading && this.state.blocksAndEvents &&
+                    <EventsList database={this.props.database} blocksAndEvents={this.state.blocksAndEvents} />
+                }
             </>
         );
     }
