@@ -8,7 +8,6 @@ export default class extends React.Component {
         this.state = {
             address: '',
             autocompleteAddresses: [],
-            // TODO: set back to false at a periodic interval
             autocompleteAddressesUpToDate: false,
         };
     }
@@ -18,6 +17,19 @@ export default class extends React.Component {
         this.setState({
             address: address,
         });
+    }
+
+    componentDidMount() {
+        // Every 15 seconds, set `autocompleteAddressesUpToDate` to false.
+        this.timerId = setInterval(() => {
+            this.setState({
+                autocompleteAddressesUpToDate: false
+            })
+        }, 15000);
+    }
+
+    componentWillUnmount() {
+        clearInterval(this.timerId);
     }
 
     render() {
