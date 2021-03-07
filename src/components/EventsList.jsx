@@ -42,6 +42,7 @@ export default class extends React.Component {
             metadataPromisesResult.forEach((dbMetadata) => {
                 // Inspired from https://github.com/polkadot-js/api/blob/ec76b11666aea72135f899267abf784fc6309156/packages/api/src/base/Init.ts#L83
                 let registry = new TypeRegistry();
+                registry.setChainProperties(this.props.chainSpec.properties);
                 registry.register(getSpecTypes(registry, this.props.chainSpec.name, dbMetadata.spec_name, dbMetadata.runtime_spec));
                 registry.setHasher(getSpecHasher(registry, this.props.chainSpec.name, dbMetadata.spec_name));
                 if (registry.knownTypes.typesBundle) {
