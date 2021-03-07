@@ -19,8 +19,6 @@ export default class extends React.Component {
     }
 
     componentDidMount() {
-        this.previousDatabaseSave = Promise.resolve(null);
-
         (async () => {
             let database = await idb.openDB('events-scraper-' + this.props.chainSpec.id, 1, {
                 upgrade(db) {
@@ -44,8 +42,9 @@ export default class extends React.Component {
                 chain_spec: JSON.stringify(this.props.chainSpec),
                 database_content: database_content,
                 database_save_callback: (to_save) => {
-                    // TODO: can this be racy? should we wait for previous save to finish?
-                    let prev = this.previousDatabaseSave;
+                    // In order to avoid race conditions, each database save must wait for the
+                    // previous one to have finished.
+                    let prev = this.previousDatabaseSave || Promise.resolve(null);
                     this.previousDatabaseSave = (async () => {
                         await prev;
                         await this.blocksFromSmoldot(to_save);
