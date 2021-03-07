@@ -20,6 +20,8 @@ export default class extends React.Component {
     }
 
     componentDidMount() {
+        this.refreshInProgress = false;
+
         // Every 15 seconds, set `autocompleteAddressesUpToDate` to false.
         this.timerId = setInterval(() => {
             this.setState({
@@ -33,7 +35,8 @@ export default class extends React.Component {
     }
 
     render() {
-        if (!this.state.autocompleteAddressesUpToDate && this.props.database) {
+        if (!this.state.autocompleteAddressesUpToDate && !this.refreshInProgress && this.props.database) {
+            this.refreshInProgress = true;
             (async () => {
                 let autocompleteAddresses = new Set();
 
@@ -43,6 +46,7 @@ export default class extends React.Component {
                     cursor = await cursor.continue();
                 }
 
+                this.refreshInProgress = false;
                 this.setState({
                     autocompleteAddresses: Array.from(autocompleteAddresses),
                     autocompleteAddressesUpToDate: true,
