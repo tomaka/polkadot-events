@@ -37,7 +37,6 @@ export default class extends React.Component {
             const database_content = await database.get('meta', 'chain');
 
             this.current_runtime_spec = null;
-            this.registry = new TypeRegistry();
 
             this.smoldot = await smoldot.start({
                 chain_spec: JSON.stringify(this.props.chainSpec),
@@ -81,6 +80,7 @@ export default class extends React.Component {
                 }
 
                 // Inspired from https://github.com/polkadot-js/api/blob/ec76b11666aea72135f899267abf784fc6309156/packages/api/src/base/Init.ts#L83
+                this.registry = new TypeRegistry();
                 this.registry.setChainProperties(this.props.chainSpec.properties);
                 this.registry.register(getSpecTypes(this.registry, this.props.chainSpec.name, undecoded_metadata.spec_name, block.runtime_spec));
                 this.registry.setHasher(getSpecHasher(this.registry, this.props.chainSpec.name, undecoded_metadata.spec_name));
