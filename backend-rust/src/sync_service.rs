@@ -144,185 +144,193 @@ fn start_sync(
         loop {
             let unix_time = ffi::unix_time();
 
-            // Verify blocks that have been fetched from queries.
-            let mut process = sync.process_one(unix_time);
-            let mut num_new_bests = 0;
-            loop {
-                match process {
-                    optimistic::ProcessOne::Idle { sync: s } => {
-                        sync = s;
-                        break;
-                    }
-                    optimistic::ProcessOne::Reset {
-                        sync: s,
-                        previous_best_height,
-                        reason,
-                    } => {
-                        log::warn!(
-                            "Consensus issue above block #{}: {}",
-                            previous_best_height,
-                            reason
-                        );
-
-                        crate::yield_once().await;
-                        process = s.process_one(unix_time);
-                    }
-                    optimistic::ProcessOne::Finalized {
-                        sync: s,
-                        finalized_blocks,
-                    } => {
-                        log::info!(
-                            "Finalized block #{}",
-                            finalized_blocks.last().unwrap().header.number
-                        );
-                        crate::ffi::best_block_update(
-                            finalized_blocks.last().unwrap().header.number,
-                        );
-
-                        crate::yield_once().await;
-
-                        let mut new_metadata = Vec::new();
-                        let mut blocks_save = Vec::with_capacity(finalized_blocks.len());
-
-                        for block in finalized_blocks {
-                            for (key, value) in &block.storage_top_trie_changes {
-                                if let Some(value) = value {
-                                    finalized_block_storage.insert(key.clone(), value.clone());
-                                } else {
-                                    let _was_there = finalized_block_storage.remove(key);
-                                    // TODO: if a block inserts a new value, then removes it in the next block, the key will remain in `finalized_block_storage`; either solve this or document this
-                                    // assert!(_was_there.is_some());
-                                }
-                            }
-
-                            if let Some(code) = block.storage_top_trie_changes.get(&b":code"[..]) {
-                                let vm = smoldot::executor::host::HostVmPrototype::new(
-                                    &code.as_ref().unwrap(),
-                                    smoldot::executor::DEFAULT_HEAP_PAGES, // TODO:
-                                    smoldot::executor::vm::ExecHint::Oneshot,
-                                )
-                                .unwrap();
-                                let (runtime_spec, vm) =
-                                    smoldot::executor::core_version(vm).unwrap();
-                                finalized_runtime_version = runtime_spec;
-                                finalized_metadata = {
-                                    let query = smoldot::metadata::query_metadata(vm);
-                                    loop {
-                                        match query {
-                                            smoldot::metadata::Query::StorageGet(_) => todo!(),
-                                            smoldot::metadata::Query::Finished(Ok((
-                                                metadata,
-                                                _,
-                                            ))) => break metadata,
-                                            smoldot::metadata::Query::Finished(Err(err)) => {
-                                                panic!("{}", err)
-                                            }
-                                        }
-                                    }
-                                };
-
-                                new_metadata.push(ffi::DatabaseSaveMetadata {
-                                    runtime_spec: finalized_runtime_version.decode().spec_version,
-                                    spec_name: finalized_runtime_version
-                                        .decode()
-                                        .spec_name
-                                        .to_owned(),
-                                    metadata: smoldot::json_rpc::methods::HexString(
-                                        finalized_metadata.clone(),
-                                    ),
-                                });
-                            } else if block.header.number == 1 {
-                                new_metadata.push(ffi::DatabaseSaveMetadata {
-                                    runtime_spec: finalized_runtime_version.decode().spec_version,
-                                    spec_name: finalized_runtime_version
-                                        .decode()
-                                        .spec_name
-                                        .to_owned(),
-                                    metadata: smoldot::json_rpc::methods::HexString(
-                                        finalized_metadata.clone(),
-                                    ),
-                                });
-                            }
-
-                            let finalized_metadata =
-                                smoldot::metadata::decode(&finalized_metadata).unwrap();
-                            let events_storage_key =
-                                smoldot::metadata::events::events_storage_key(finalized_metadata)
-                                    .unwrap();
-                            let events_encoded = if let Some(value) =
-                                block.storage_top_trie_changes.get(&events_storage_key[..])
-                            {
-                                value.clone().unwrap()
-                            } else {
-                                todo!()
-                            };
-
-                            blocks_save.push(ffi::DatabaseSaveBlock {
-                                number: block.header.number,
-                                runtime_spec: finalized_runtime_version.decode().spec_version,
-                                events: smoldot::json_rpc::methods::HexString(events_encoded),
-                            });
-                        }
-
-                        ffi::database_save(&ffi::DatabaseSave {
-                            chain: &finalized_serialize::encode_chain_storage(
-                                s.as_chain_information(),
-                                Some(finalized_block_storage.iter()),
-                            ),
-                            new_metadata,
-                            blocks: blocks_save,
-                        });
-
-                        process = s.process_one(unix_time);
-                    }
-
-                    optimistic::ProcessOne::NewBest {
-                        sync: s,
-                        new_best_number,
-                        ..
-                    } => {
-                        num_new_bests += 1;
-                        if num_new_bests % 23 == 0 {
-                            crate::yield_once().await;
-                            crate::ffi::best_block_update(new_best_number);
-                        }
-                        process = s.process_one(unix_time);
-                    }
-
-                    optimistic::ProcessOne::FinalizedStorageGet(req) => {
-                        let value = finalized_block_storage
-                            .get(&req.key_as_vec())
-                            .map(|v| &v[..]);
-                        process = req.inject_value(value);
-                    }
-                    optimistic::ProcessOne::FinalizedStorageNextKey(req) => {
-                        // TODO: to_vec() :-/
-                        let req_key = req.key().as_ref().to_vec();
-                        // TODO: to_vec() :-/
-                        let next_key = finalized_block_storage
-                            .range(req.key().as_ref().to_vec()..)
-                            .find(move |(k, _)| k[..] > req_key[..])
-                            .map(|(k, _)| k);
-                        process = req.inject_key(next_key);
-                    }
-                    optimistic::ProcessOne::FinalizedStoragePrefixKeys(req) => {
-                        // TODO: to_vec() :-/
-                        let prefix = req.prefix().as_ref().to_vec();
-                        // TODO: to_vec() :-/
-                        let keys = finalized_block_storage
-                            .range(req.prefix().as_ref().to_vec()..)
-                            .take_while(|(k, _)| k.starts_with(&prefix))
-                            .map(|(k, _)| k);
-                        process = req.inject_keys(keys);
-                    }
-                }
-            }
-
-            // Start requests that need to be started.
-            // Note that this is done after calling `process_one`, as the processing of pending
-            // blocks can result in new requests but not the contrary.
             // TODO: unpausing the syncing should somehow wake-up this task
             if !ffi::is_syncing_paused() {
+                // Verify blocks that have been fetched from queries.
+                let mut process = sync.process_one(unix_time);
+                let mut num_new_bests = 0;
+                loop {
+                    match process {
+                        optimistic::ProcessOne::Idle { sync: s } => {
+                            sync = s;
+                            break;
+                        }
+                        optimistic::ProcessOne::Reset {
+                            sync: s,
+                            previous_best_height,
+                            reason,
+                        } => {
+                            log::warn!(
+                                "Consensus issue above block #{}: {}",
+                                previous_best_height,
+                                reason
+                            );
+
+                            crate::yield_once().await;
+                            process = s.process_one(unix_time);
+                        }
+                        optimistic::ProcessOne::Finalized {
+                            sync: s,
+                            finalized_blocks,
+                        } => {
+                            log::info!(
+                                "Finalized block #{}",
+                                finalized_blocks.last().unwrap().header.number
+                            );
+                            crate::ffi::best_block_update(
+                                finalized_blocks.last().unwrap().header.number,
+                            );
+
+                            crate::yield_once().await;
+
+                            let mut new_metadata = Vec::new();
+                            let mut blocks_save = Vec::with_capacity(finalized_blocks.len());
+
+                            for block in finalized_blocks {
+                                for (key, value) in &block.storage_top_trie_changes {
+                                    if let Some(value) = value {
+                                        finalized_block_storage.insert(key.clone(), value.clone());
+                                    } else {
+                                        let _was_there = finalized_block_storage.remove(key);
+                                        // TODO: if a block inserts a new value, then removes it in the next block, the key will remain in `finalized_block_storage`; either solve this or document this
+                                        // assert!(_was_there.is_some());
+                                    }
+                                }
+
+                                if let Some(code) =
+                                    block.storage_top_trie_changes.get(&b":code"[..])
+                                {
+                                    let vm = smoldot::executor::host::HostVmPrototype::new(
+                                        &code.as_ref().unwrap(),
+                                        smoldot::executor::DEFAULT_HEAP_PAGES, // TODO:
+                                        smoldot::executor::vm::ExecHint::Oneshot,
+                                    )
+                                    .unwrap();
+                                    let (runtime_spec, vm) =
+                                        smoldot::executor::core_version(vm).unwrap();
+                                    finalized_runtime_version = runtime_spec;
+                                    finalized_metadata = {
+                                        let query = smoldot::metadata::query_metadata(vm);
+                                        loop {
+                                            match query {
+                                                smoldot::metadata::Query::StorageGet(_) => todo!(),
+                                                smoldot::metadata::Query::Finished(Ok((
+                                                    metadata,
+                                                    _,
+                                                ))) => break metadata,
+                                                smoldot::metadata::Query::Finished(Err(err)) => {
+                                                    panic!("{}", err)
+                                                }
+                                            }
+                                        }
+                                    };
+
+                                    new_metadata.push(ffi::DatabaseSaveMetadata {
+                                        runtime_spec: finalized_runtime_version
+                                            .decode()
+                                            .spec_version,
+                                        spec_name: finalized_runtime_version
+                                            .decode()
+                                            .spec_name
+                                            .to_owned(),
+                                        metadata: smoldot::json_rpc::methods::HexString(
+                                            finalized_metadata.clone(),
+                                        ),
+                                    });
+                                } else if block.header.number == 1 {
+                                    new_metadata.push(ffi::DatabaseSaveMetadata {
+                                        runtime_spec: finalized_runtime_version
+                                            .decode()
+                                            .spec_version,
+                                        spec_name: finalized_runtime_version
+                                            .decode()
+                                            .spec_name
+                                            .to_owned(),
+                                        metadata: smoldot::json_rpc::methods::HexString(
+                                            finalized_metadata.clone(),
+                                        ),
+                                    });
+                                }
+
+                                let finalized_metadata =
+                                    smoldot::metadata::decode(&finalized_metadata).unwrap();
+                                let events_storage_key =
+                                    smoldot::metadata::events::events_storage_key(
+                                        finalized_metadata,
+                                    )
+                                    .unwrap();
+                                let events_encoded = if let Some(value) =
+                                    block.storage_top_trie_changes.get(&events_storage_key[..])
+                                {
+                                    value.clone().unwrap()
+                                } else {
+                                    todo!()
+                                };
+
+                                blocks_save.push(ffi::DatabaseSaveBlock {
+                                    number: block.header.number,
+                                    runtime_spec: finalized_runtime_version.decode().spec_version,
+                                    events: smoldot::json_rpc::methods::HexString(events_encoded),
+                                });
+                            }
+
+                            ffi::database_save(&ffi::DatabaseSave {
+                                chain: &finalized_serialize::encode_chain_storage(
+                                    s.as_chain_information(),
+                                    Some(finalized_block_storage.iter()),
+                                ),
+                                new_metadata,
+                                blocks: blocks_save,
+                            });
+
+                            process = s.process_one(unix_time);
+                        }
+
+                        optimistic::ProcessOne::NewBest {
+                            sync: s,
+                            new_best_number,
+                            ..
+                        } => {
+                            num_new_bests += 1;
+                            if num_new_bests % 23 == 0 {
+                                crate::yield_once().await;
+                                crate::ffi::best_block_update(new_best_number);
+                            }
+                            process = s.process_one(unix_time);
+                        }
+
+                        optimistic::ProcessOne::FinalizedStorageGet(req) => {
+                            let value = finalized_block_storage
+                                .get(&req.key_as_vec())
+                                .map(|v| &v[..]);
+                            process = req.inject_value(value);
+                        }
+                        optimistic::ProcessOne::FinalizedStorageNextKey(req) => {
+                            // TODO: to_vec() :-/
+                            let req_key = req.key().as_ref().to_vec();
+                            // TODO: to_vec() :-/
+                            let next_key = finalized_block_storage
+                                .range(req.key().as_ref().to_vec()..)
+                                .find(move |(k, _)| k[..] > req_key[..])
+                                .map(|(k, _)| k);
+                            process = req.inject_key(next_key);
+                        }
+                        optimistic::ProcessOne::FinalizedStoragePrefixKeys(req) => {
+                            // TODO: to_vec() :-/
+                            let prefix = req.prefix().as_ref().to_vec();
+                            // TODO: to_vec() :-/
+                            let keys = finalized_block_storage
+                                .range(req.prefix().as_ref().to_vec()..)
+                                .take_while(|(k, _)| k.starts_with(&prefix))
+                                .map(|(k, _)| k);
+                            process = req.inject_keys(keys);
+                        }
+                    }
+                }
+
+                // Start requests that need to be started.
+                // Note that this is done after calling `process_one`, as the processing of pending
+                // blocks can result in new requests but not the contrary.
                 while let Some(action) = sync.next_request_action() {
                     match action {
                         optimistic::RequestAction::Start {

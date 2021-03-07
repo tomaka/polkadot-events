@@ -14,7 +14,7 @@ export default class extends React.Component {
         super(props);
         this.state = {
             currentBlockHeight: null,
-            syncingPaused: false,
+            syncingPaused: true,  // TODO: false?
         };
     }
 
@@ -55,7 +55,7 @@ export default class extends React.Component {
                 }
             });
 
-            this.smoldot.set_syncing_paused(this.state.paused);
+            this.smoldot.set_syncing_paused(this.state.syncingPaused);
         })();
     }
 
