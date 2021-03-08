@@ -16,3 +16,9 @@ Doing `yarn run build` produces a single `.html` file that inlines everything. H
 # How it works
 
 The script runs a full node that connects to the Polkadot chain, reads the list of events at each block, then uses the PolkadotJS library to decode these events and index them.
+
+# How to maintain this code
+
+Everything in the `src` repository was written for this project. Feel free to modify.
+
+The code in `backend-rust` has mostly been copy-pasted from [the smoldot repository](https://github.com/paritytech/smoldot) and trimmed down. The only part that has been written for this project is everything related to sending finalized blocks to the frontend. The Rust code difficult to read and thus to maintain, but it isn't really expected to change. I would encourage improving the code in the smoldot repository in order to make code more reusable (see [this issue](https://github.com/paritytech/smoldot/issues/595)), which should reduce the amount of code in `backend-rust`.
