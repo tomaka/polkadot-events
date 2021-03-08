@@ -1,5 +1,5 @@
 import React from 'react';
-import { Grid, Typography } from '@material-ui/core';
+import { Container, Grid, Paper, Typography } from '@material-ui/core';
 import * as idb from 'idb/with-async-ittr.js';
 import { Metadata } from '@polkadot/metadata';
 import { TypeRegistry } from '@polkadot/types';
@@ -147,16 +147,20 @@ export default class extends React.Component {
 
     render() {
         return (
-            <Grid
-                container
-                direction="column"
-                justify="center"
-                alignItems="stretch"
-            >
-                <Typography variant="h1">Polkadot events scraper</Typography>
-                <Header syncingPaused={this.state.syncingPaused} setSyncingPaused={(paused) => { this.smoldot.set_syncing_paused(paused); this.setState({ syncingPaused: paused }); }} verifiedBlockHeight={this.state.verifiedBlockHeight} savedBlockHeight={this.state.savedBlockHeight} chainName={this.props.chainSpec.name} />
-                <AccountViewer chainSpec={this.props.chainSpec} database={this.state.database} />
-            </Grid>
+            <Container maxWidth="lg">
+                <Paper>
+                    <Grid
+                        container
+                        direction="column"
+                        justify="center"
+                        alignItems="stretch"
+                    >
+                        <Typography variant="h1">Polkadot events scraper</Typography>
+                        <Header syncingPaused={this.state.syncingPaused} setSyncingPaused={(paused) => { this.smoldot.set_syncing_paused(paused); this.setState({ syncingPaused: paused }); }} verifiedBlockHeight={this.state.verifiedBlockHeight} savedBlockHeight={this.state.savedBlockHeight} chainName={this.props.chainSpec.name} />
+                        <AccountViewer chainSpec={this.props.chainSpec} database={this.state.database} />
+                    </Grid>
+                </Paper>
+            </Container>
         );
     }
 }

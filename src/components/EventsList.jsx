@@ -1,5 +1,5 @@
 import React from 'react';
-import { CircularProgress, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Typography } from '@material-ui/core';
+import { CircularProgress, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Tooltip, Typography } from '@material-ui/core';
 import { Metadata } from '@polkadot/metadata';
 import { TypeRegistry } from '@polkadot/types';
 import { getSpecTypes, getSpecHasher, getSpecAlias, getSpecExtensions } from '@polkadot/types-known';
@@ -71,6 +71,7 @@ export default class extends React.Component {
                     eventSection: record.event.section,
                     eventMethod: record.event.method,
                     documentation: record.event.meta.documentation,
+                    metaArgs: record.event.meta.args,
                     argIndex: dbEvent.argIndex,
                     args: record.event.data
                 };
@@ -112,16 +113,22 @@ export default class extends React.Component {
                                                         {entry.blockNumber}
                                                     </TableCell>
                                                     <TableCell>
-                                                        {entry.eventSection}
+                                                        <Tooltip title={entry.documentation} arrow>
+                                                            <Typography>{entry.eventSection}</Typography>
+                                                        </Tooltip>
                                                     </TableCell>
                                                     <TableCell>
-                                                        {entry.eventMethod}
+                                                        <Tooltip title={entry.documentation} arrow>
+                                                            <Typography>{entry.eventMethod}</Typography>
+                                                        </Tooltip>
                                                     </TableCell>
                                                     {this.state.columns.map((dummy, colNum) => (
                                                         <TableCell key={colNum}>
-                                                            <Typography color={entry.argIndex == colNum ? 'primary' : 'initial'}>
-                                                                {entry.args[colNum] ? entry.args[colNum].toString() : ''}
-                                                            </Typography>
+                                                            <Tooltip title={entry.args[colNum] ? entry.metaArgs[colNum] : ''} arrow>
+                                                                <Typography color={entry.argIndex == colNum ? 'primary' : 'initial'}>
+                                                                    {entry.args[colNum] ? entry.args[colNum].toString() : ''}
+                                                                </Typography>
+                                                            </Tooltip>
                                                         </TableCell>
                                                     ))}
                                                 </TableRow>
