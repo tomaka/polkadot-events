@@ -7,13 +7,14 @@ import { getSpecTypes, getSpecHasher, getSpecAlias, getSpecExtensions } from '@p
 
 import * as smoldot from './../smoldot.js';
 import { default as AccountViewer } from './AccountViewer.jsx';
-import { default as NodeState } from './NodeState.jsx';
+import { default as Header } from './Header.jsx';
 
 export default class extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            currentBlockHeight: null,
+            verifiedBlockHeight: null,
+            savedBlockHeight: null,  // TODO: fill on startup?
             syncingPaused: true,  // TODO: false?
         };
     }
@@ -52,7 +53,7 @@ export default class extends React.Component {
                 },
                 best_block_update_callback: (num) => {
                     this.setState({
-                        currentBlockHeight: num,
+                        verifiedBlockHeight: num,
                     });
                 }
             });
@@ -69,6 +70,7 @@ export default class extends React.Component {
     async blocksFromSmoldot(to_save) {
         let blocksToStore = [];
         let eventsToStore = [];
+        let savedBlockHeight = 0;
 
         for (const blockIndex in to_save.blocks) {
             const block = to_save.blocks[blockIndex];
@@ -113,7 +115,15 @@ export default class extends React.Component {
             if (includeBlock) {
                 blocksToStore.push(block);
             }
+
+            if (block.number > savedBlockHeight) {
+                savedBlockHeight = block.number;
+            }
         }
+
+        this.setState({
+            savedBlockHeight: savedBlockHeight
+        });
 
         // Store everything in the database.
         // This is done in a single transaction, in order to make sure that events aren't missed.
@@ -144,7 +154,7 @@ export default class extends React.Component {
                 alignItems="stretch"
             >
                 <Typography variant="h1">Polkadot events scraper</Typography>
-                <NodeState syncingPaused={this.state.syncingPaused} setSyncingPaused={(paused) => { this.smoldot.set_syncing_paused(paused); this.setState({ syncingPaused: paused }); }} blockHeight={this.state.currentBlockHeight} chainName={this.props.chainSpec.name} />
+                <Header syncingPaused={this.state.syncingPaused} setSyncingPaused={(paused) => { this.smoldot.set_syncing_paused(paused); this.setState({ syncingPaused: paused }); }} verifiedBlockHeight={this.state.verifiedBlockHeight} savedBlockHeight={this.state.savedBlockHeight} chainName={this.props.chainSpec.name} />
                 <AccountViewer chainSpec={this.props.chainSpec} database={this.state.database} />
             </Grid>
         );
