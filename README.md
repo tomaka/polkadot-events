@@ -19,6 +19,6 @@ The script runs a full node that connects to the Polkadot chain, reads the list 
 
 # How to maintain this code
 
-Everything in the `src` directory was written for this project. Feel free to modify.
+Everything in the `src` directory was written for this project, except for the `smoldot.js` file. Feel free to modify.
 
-The code in `backend-rust` has mostly been copy-pasted from [the smoldot repository](https://github.com/paritytech/smoldot) and trimmed down. The only part that has been written for this project is everything related to sending finalized blocks to the frontend. The Rust code difficult to read and thus to maintain, but it isn't really expected to change. I would encourage improving the code in the smoldot repository in order to make code more reusable (see [this issue](https://github.com/paritytech/smoldot/issues/595)), which should reduce the amount of code in `backend-rust`.
+The code in `backend-rust` and the `smoldot.js` file have mostly been copy-pasted from [the smoldot repository](https://github.com/paritytech/smoldot) and trimmed down. The major part that has been written specifically for this project is everything related to sending finalized blocks from Rust to the frontend. The Rust code is difficult to read and thus to maintain, but it isn't really expected to change. I would encourage improving the code in the smoldot repository in order to make code more reusable (see [this issue](https://github.com/paritytech/smoldot/issues/595)), which should reduce the amount of code in `backend-rust`.
