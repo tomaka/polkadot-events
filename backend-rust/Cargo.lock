@@ -1258,7 +1258,7 @@ checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
 [[package]]
 name = "smoldot"
 version = "0.1.0"
-source = "git+https://github.com/tomaka/substrate-lite-1?branch=js-vm#30214bf14be3f4f8d3c1d8d3a197c6ac19886a5d"
+source = "git+https://github.com/tomaka/substrate-lite-1?branch=js-vm#61a0f6ced0618473d728e0dfc4edb004ac4a0308"
 dependencies = [
  "ahash",
  "arrayvec 0.5.2",
