@@ -5,7 +5,7 @@ import { Metadata } from '@polkadot/metadata';
 import { TypeRegistry } from '@polkadot/types';
 import { getSpecTypes, getSpecHasher, getSpecAlias, getSpecExtensions } from '@polkadot/types-known';
 
-import * as smoldot from './../smoldot.js';
+import * as smoldot from './../smoldot/index.js';
 import { default as AccountViewer } from './AccountViewer.jsx';
 import { default as Header } from './Header.jsx';
 
@@ -15,7 +15,7 @@ export default class extends React.Component {
         this.state = {
             verifiedBlockHeight: null,
             savedBlockHeight: null,  // TODO: fill on startup?
-            syncingPaused: true,  // TODO: false?
+            syncingPaused: false,
         };
     }
 
@@ -48,7 +48,8 @@ export default class extends React.Component {
                     let prev = this.previousDatabaseSave || Promise.resolve(null);
                     this.previousDatabaseSave = (async () => {
                         await prev;
-                        await this.blocksFromSmoldot(to_save);
+                        const data = JSON.parse(to_save);
+                        await this.blocksFromSmoldot(data);
                     })();
                 },
                 best_block_update_callback: (num) => {
