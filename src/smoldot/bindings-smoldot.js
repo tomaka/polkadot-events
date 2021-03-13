@@ -35,8 +35,7 @@ export default (config) => {
 
     return {
         is_supported: () => {
-            // TODO: remove false here ; there's some weird thing going on with Buffer.from not liking SharedArrayBuffer
-            return typeof SharedArrayBuffer !== 'undefined' && false
+            return typeof SharedArrayBuffer !== 'undefined'
         },
 
         new_module: (module_ptr, module_size, idOut, numImportsOutPtr) => {
