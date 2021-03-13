@@ -232,7 +232,10 @@ const decodeVecWasmValue = (buffer, offset) => {
     out.push(value);
   }
 
-  return out;
+  return {
+    value: out,
+    offsetAfter: currentOffset
+  };
 };
 
 // Gives back hand to the outside and waits for a response to be written on the
@@ -468,7 +471,7 @@ compat.setOnMessage((initializationMessage) => {
     } else { // Resume
       let returnValue;
       try {
-        returnValue = toStart.function(toStart.params);
+        returnValue = toStart.function(...toStart.params);
       } catch (error) {
         // TODO: can also be interruption from host function because of a StartFunction
         const errorMsg = error.toString();
