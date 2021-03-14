@@ -35,14 +35,6 @@ export async function start(config) {
   // (https://github.com/parcel-bundler/parcel/pull/5846)
   const worker = new Worker('./worker.js');
 
-  // While spawning a Worker within a Worker is theoretically possible, in practice it seems very
-  // buggy, especially because we combine this, in this code, with `Atomics.wait`. Instead of
-  // have our main worker spawn child workers, it instead sends a message back here so that this
-  // function here spawns these child workers.
-  // This variable stores a list of these `Worker` objects requested to be spawned by the main
-  // worker.
-  let subWorkers = {};
-
   // The worker can send us either a database save message, or a JSON-RPC answer.
   workerOnMessage(worker, (message) => {
     if (message.kind == 'jsonrpc') {
@@ -54,12 +46,6 @@ export async function start(config) {
     } else if (message.kind == 'best-block-update') {
       if (config.best_block_update_callback)
         config.best_block_update_callback(message.num);
-    } else if (message.kind == 'spawn-vm-worker') {
-      const worker = new Worker('./bindings-smoldot-worker.js');
-      worker.postMessage(message.data.workerMessage);
-      subWorkers[message.data.id] = worker;
-    } else if (message.kind == 'terminate-vm-worker') {
-      subWorkers[message.data.id].terminate();
     } else {
       console.error('Unknown message type', message);
     }

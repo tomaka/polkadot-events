@@ -20,4 +20,4 @@ rand = "0.8.3"
 serde = "1.0.124"
 serde_json = "1.0.64"
 # TODO: switch to upstream after https://github.com/paritytech/smoldot/pull/636 is published
-smoldot = { git = "https://github.com/tomaka/substrate-lite-1", branch = "js-vm", default-features = false, features = ["javascript-wasm-vm"] }
+smoldot = { version = "0.1.0", default-features = false }
